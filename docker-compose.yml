@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: governance_db
+    environment:
+      POSTGRES_USER: governance
+      POSTGRES_PASSWORD: governance123
+      POSTGRES_DB: governance_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
