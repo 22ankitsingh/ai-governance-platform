@@ -1,13 +1,19 @@
 """
 Upload Service — supports Cloudinary when configured, falls back to local file storage.
+
+Extras:
+  - read_image_bytes(url): read an image (local or remote) as raw bytes for Gemini multimodal
 """
 import os
 import uuid
+import logging
 import aiofiles
 from typing import Optional
 from fastapi import UploadFile
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def upload_image(file: UploadFile, folder: str = "issues") -> str:
@@ -18,7 +24,7 @@ async def upload_image(file: UploadFile, folder: str = "issues") -> str:
 
 
 async def _upload_cloudinary(file: UploadFile, folder: str) -> str:
-    """Upload to Cloudinary."""
+    """Upload to Cloudinary and return secure_url."""
     try:
         import cloudinary
         import cloudinary.uploader
@@ -35,9 +41,11 @@ async def _upload_cloudinary(file: UploadFile, folder: str) -> str:
             folder=f"governance/{folder}",
             resource_type="image",
         )
-        return result["secure_url"]
-    except Exception:
-        # Fall back to local on error
+        url = result["secure_url"]
+        logger.info(f"Cloudinary upload success: {url}")
+        return url
+    except Exception as e:
+        logger.warning(f"Cloudinary upload failed: {e}. Falling back to local.")
         await file.seek(0)
         return await _upload_local(file, folder)
 
@@ -56,3 +64,42 @@ async def _upload_local(file: UploadFile, folder: str) -> str:
         await f.write(content)
 
     return f"/uploads/{folder}/{filename}"
+
+
+async def read_image_bytes(url: str) -> Optional[bytes]:
+    """
+    Read image as raw bytes — works for both local paths and remote HTTPS URLs.
+    Used to provide inline image data to Gemini multimodal.
+
+    Returns None on any failure (Gemini will proceed text-only).
+    """
+    if not url:
+        return None
+
+    try:
+        # Local file: /uploads/issues/xxx.jpg
+        if url.startswith("/uploads/"):
+            filepath = url.lstrip("/")  # strip leading slash → relative path
+            # Try from backend working directory
+            if not os.path.isabs(filepath):
+                filepath = os.path.join(os.getcwd(), filepath)
+            if os.path.exists(filepath):
+                async with aiofiles.open(filepath, "rb") as f:
+                    data = await f.read()
+                logger.debug(f"Read local image: {filepath} ({len(data)} bytes)")
+                return data
+            else:
+                logger.warning(f"Local image not found: {filepath}")
+                return None
+
+        # Remote URL: download via httpx
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            logger.debug(f"Downloaded remote image: {url} ({len(resp.content)} bytes)")
+            return resp.content
+
+    except Exception as e:
+        logger.warning(f"read_image_bytes failed for {url}: {e}")
+        return None

@@ -1,21 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { adminAPI, referenceAPI } from '../../api/client';
+import { adminAPI } from '../../api/client';
 import StatusBadge, { SeverityBadge, PriorityBadge, ConfidenceMeter } from '../../components/StatusBadge';
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+  });
+};
 
 export default function TriageQueue() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [departments, setDepartments] = useState([]);
-  const [deptGroups, setDeptGroups] = useState([]); // [{department_id, department_name, issue_types:[{id,name}]}]
-  const [filters, setFilters] = useState({
-    status: '', issue_type_id: '', severity: '', department_id: '', search: ''
-  });
+  const [filters, setFilters] = useState({ status: 'not_assigned', severity: '' });
 
   useEffect(() => {
-    adminAPI.listDepartments().then(r => setDepartments(r.data)).catch(() => {});
-    referenceAPI.categories().then(r => setDeptGroups(r.data)).catch(() => {});
-  }, []);
+    load();
+  }, [filters]);
 
   const load = () => {
     setLoading(true);
@@ -24,122 +26,94 @@ export default function TriageQueue() {
     adminAPI.listIssues(params).then(r => setIssues(r.data)).catch(() => {}).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [filters]);
-
   const sortedIssues = [...issues].sort((a, b) => {
-    if (a.status === "closed" && b.status !== "closed") return 1;
-    if (a.status !== "closed" && b.status === "closed") return -1;
-    return new Date(b.updated_at) - new Date(a.updated_at);
+    const priorityMap = { critical: 1, high: 2, medium: 3, low: 4 };
+    const pA = priorityMap[a.severity] || 5;
+    const pB = priorityMap[b.severity] || 5;
+    if (pA !== pB) return pA - pB;
+    return new Date(b.created_at) - new Date(a.created_at);
   });
-
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
-
-  // All issue types flat list for filter (or filtered by selected dept)
-  const allIssueTypes = deptGroups.flatMap(g => g.issue_types.map(it => ({
-    ...it, department_name: g.department_name,
-  })));
-  const filteredIssueTypeOptions = filters.department_id
-    ? deptGroups.find(g => g.department_id === filters.department_id)?.issue_types || []
-    : allIssueTypes;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>Triage Queue</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{issues.length} issues</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.5rem' }}>Triage Queue</h1>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <select className="form-input" style={{ width: '160px' }}
+            value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+            <option value="">All Status</option>
+            <option value="not_assigned">Pending Triage</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+          <select className="form-input" style={{ width: '160px' }}
+            value={filters.severity} onChange={e => setFilters(f => ({ ...f, severity: e.target.value }))}>
+            <option value="">All Severity</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
         </div>
-      </div>
-
-      <div className="filters-bar">
-        <input className="search-input" placeholder="🔍 Search issues..." value={filters.search}
-          onChange={e => setFilters(f => ({ ...f, search: e.target.value }))} />
-        <select className="filter-select" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
-          <option value="">All Statuses</option>
-          <option value="not_assigned">Not Assigned</option>
-          <option value="in_progress">In Progress</option>
-          <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
-          <option value="reopened">Reopened</option>
-        </select>
-        <select className="filter-select" value={filters.severity} onChange={e => setFilters(f => ({ ...f, severity: e.target.value }))}>
-          <option value="">All Severities</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="critical">Critical</option>
-        </select>
-        <select className="filter-select" value={filters.department_id} onChange={e => setFilters(f => ({ ...f, department_id: e.target.value, issue_type_id: '' }))}>
-          <option value="">All Departments</option>
-          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <select
-          className="filter-select"
-          value={filters.issue_type_id}
-          onChange={e => setFilters(f => ({ ...f, issue_type_id: e.target.value }))}
-        >
-          <option value="">All Issue Types</option>
-          {filteredIssueTypeOptions.map(it => (
-            <option key={it.id} value={it.id}>{it.name}</option>
-          ))}
-        </select>
       </div>
 
       {loading ? (
         <div className="loading-spinner"><div className="spinner"></div></div>
-      ) : issues.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">📋</div>
-          <h3>No issues found</h3>
-          <p>Try adjusting your filters</p>
-        </div>
       ) : (
-        <div className="table-wrapper">
-          <table>
+        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                <th>Priority</th>
-                <th>Issue</th>
-                <th>Reporter</th>
-                <th>Issue Type</th>
-                <th>Department</th>
-                <th>Status</th>
-                <th>Severity</th>
-                <th>AI Confidence</th>
-                <th>Date</th>
-                <th></th>
+              <tr style={{ background: 'var(--primary-50)', textAlign: 'left' }}>
+                <th style={{ padding: '0.75rem 1rem', width: '40px' }}>P</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Issue</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Reporter</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Type</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Dept</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Status</th>
+                <th style={{ padding: '0.75rem 1rem' }}>AI Conf</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Created</th>
+                <th style={{ padding: '0.75rem 1rem' }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {sortedIssues.map(issue => (
-                <tr key={issue.id}>
-                  <td><PriorityBadge priority={issue.priority} /></td>
-                  <td>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                      {issue.title.length > 45 ? issue.title.slice(0, 45) + '...' : issue.title}
-                    </div>
-                    {issue.reopen_count > 0 && (
-                      <span className="badge badge-reopened" style={{ marginTop: '0.25rem' }}>Reopened ×{issue.reopen_count}</span>
-                    )}
-                  </td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                    {issue.reporter?.full_name || '—'}
-                  </td>
-                  <td style={{ fontSize: '0.82rem' }}>{issue.issue_type?.name || '—'}</td>
-                  <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    {issue.department?.name
-                      ? issue.department.name.split('&')[0].trim()  // abbreviate long names
-                      : '—'}
-                  </td>
-                  <td><StatusBadge status={issue.status} /></td>
-                  <td><SeverityBadge severity={issue.severity} /></td>
-                  <td style={{ minWidth: 120 }}><ConfidenceMeter value={issue.ai_confidence} /></td>
-                  <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatDate(issue.created_at)}</td>
-                  <td>
-                    <Link to={`/admin/issues/${issue.id}`} className="btn btn-ghost btn-sm">Manage</Link>
-                  </td>
-                </tr>
-              ))}
+              {sortedIssues.length === 0 ? (
+                <tr><td colSpan="9" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No issues found matching filters</td></tr>
+              ) : (
+                sortedIssues.map(issue => (
+                  <tr key={issue.id} style={{ borderTop: '1px solid var(--border-light)' }}>
+                    <td style={{ padding: '0.75rem 1rem' }}><PriorityBadge priority={issue.priority} /></td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                        {issue.title.length > 40 ? issue.title.slice(0, 40) + '...' : issue.title}
+                      </div>
+                      {issue.reopen_count > 0 && (
+                        <span className="badge badge-reopened" style={{ marginTop: '0.2rem', fontSize: '0.65rem' }}>Reopened ×{issue.reopen_count}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      {issue.reporter?.full_name || '—'}
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem', fontSize: '0.82rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        {issue.category || issue.issue_type?.name || '—'}
+                        {!issue.issue_type_id && issue.category && (
+                          <span style={{ fontSize: '0.6rem', fontWeight: 900, background: 'rgba(51,129,255,0.1)', color: 'var(--primary-600)', padding: '0.1rem 0.3rem', borderRadius: '3px' }}>AI</span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                      {issue.department?.name ? issue.department.name.split('&')[0].trim() : '—'}
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem' }}><StatusBadge status={issue.status} /></td>
+                    <td style={{ padding: '0.75rem 1rem' }}><ConfidenceMeter value={issue.ai_confidence} /></td>
+                    <td style={{ padding: '0.75rem 1rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{formatDate(issue.created_at)}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <Link to={`/admin/issues/${issue.id}`} className="btn btn-sm btn-ghost">Manage</Link>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

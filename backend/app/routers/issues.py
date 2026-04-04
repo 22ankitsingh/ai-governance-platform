@@ -8,6 +8,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.issue import Issue
+from app.models.department import Department
 from app.models.issue_type import IssueType
 from app.models.issue_media import IssueMedia
 from app.models.ai_prediction import AIPrediction
@@ -18,8 +19,9 @@ from app.schemas.issue import (
     VerificationVoteCreate, MediaOut, VerificationVoteOut,
 )
 from app.middleware.auth import get_current_user
-from app.services.ai_service import analyze_issue
+from app.services.ai_service import analyze_issue, infer_department
 from app.services.upload_service import upload_image
+from app.services.geo_service import reverse_geocode
 from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/api/issues", tags=["Issues"])
@@ -52,9 +54,7 @@ async def _resolve_issue_type(
     """Fetch IssueType by id; raises 400 if id provided but not found."""
     if not issue_type_id:
         return None
-    result = await db.execute(
-        select(IssueType).where(IssueType.id == issue_type_id)
-    )
+    result = await db.execute(select(IssueType).where(IssueType.id == issue_type_id))
     it = result.scalar_one_or_none()
     if not it:
         raise HTTPException(status_code=400, detail=f"Invalid issue_type_id: {issue_type_id}")
@@ -62,10 +62,14 @@ async def _resolve_issue_type(
 
 
 async def _get_issue_type_by_name(name: str, db: AsyncSession) -> Optional[IssueType]:
-    """Look up issue type by its name string (from AI result)."""
-    result = await db.execute(
-        select(IssueType).where(IssueType.name == name)
-    )
+    """Look up predefined IssueType by exact name (case-sensitive)."""
+    result = await db.execute(select(IssueType).where(IssueType.name == name))
+    return result.scalar_one_or_none()
+
+
+async def _get_department_by_name(name: str, db: AsyncSession) -> Optional[Department]:
+    """Look up Department by exact name."""
+    result = await db.execute(select(Department).where(Department.name == name))
     return result.scalar_one_or_none()
 
 
@@ -78,68 +82,139 @@ async def create_issue(
     longitude: Optional[float] = Form(None),
     address: Optional[str] = Form(None),
     context: Optional[str] = Form(None),
-    issue_type_id: Optional[str] = Form(None),   # NEW: citizen can pre-select
-    # Legacy field kept for backward compatibility — ignored if issue_type_id set
+    issue_type_id: Optional[str] = Form(None),
+    # Legacy field — ignored if issue_type_id set
     category: Optional[str] = Form(None),
 
     images: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new issue with optional image uploads.
-    
-    Accepts issue_type_id (preferred) or lets AI auto-classify.
-    Department is always auto-assigned from the issue_type.
-    Issue creation NEVER fails due to AI errors.
     """
-    # Validate issue_type_id if provided
+    Create a new civic issue with optional images.
+
+    Pipeline:
+    1. Validate pre-selected issue_type_id (if provided)
+    2. Upload images (Cloudinary / local)
+    3. Reverse geocode lat/lng → address + area_type
+    4. AI analysis (Gemini 2.5 Flash or keyword fallback) with:
+       - title, description
+       - image (multimodal if uploaded)
+       - address, area_type from geocoding
+    5. Assign dynamic issue_type (free-form string stored in category)
+    6. Match predefined IssueType record if possible (for FK)
+    7. Assign department (from IssueType FK → AI dept → inferred)
+
+    Never fails due to AI/geo errors.
+    """
+    # ── Step 1: Validate pre-selected issue_type_id ────────────────────────
     issue_type_obj: Optional[IssueType] = None
     if issue_type_id:
         issue_type_obj = await _resolve_issue_type(issue_type_id, db)
 
+    # ── Step 2: Upload images ──────────────────────────────────────────────
+    uploaded_urls: list[str] = []
+    for img in images:
+        if img.filename:
+            url = await upload_image(img, folder="issues")
+            uploaded_urls.append(url)
+
+    image_url = uploaded_urls[0] if uploaded_urls else None
+
+    # ── Step 3: Reverse geocode ────────────────────────────────────────────
+    geo_result = {"address": "Unknown", "city": "", "state": "", "area_type": "unknown"}
+    resolved_address = address or ""
+    resolved_area_type = context or "unknown"
+
+    if latitude is not None and longitude is not None:
+        geo_result = await reverse_geocode(latitude, longitude)
+        # Only overwrite if not already provided by user
+        if not address or address.strip() == "":
+            resolved_address = geo_result["address"]
+        if not context or context.strip() == "":
+            resolved_area_type = geo_result["area_type"]
+
+    # ── Step 4: AI analysis ────────────────────────────────────────────────
+    # Run AI even if user pre-selected issue_type (for severity/priority/reasoning)
+    ai_result = await analyze_issue(
+        title=title,
+        description=description,
+        image_url=image_url,
+        address=resolved_address if resolved_address != "Unknown" else "",
+        area_type=resolved_area_type,
+    )
+
+    ai_issue_type_name: str = ai_result.get("issue_type", "")
+    ai_department_name: str = ai_result.get("department", "")
+
+    # ── Step 5 & 6: Issue type assignment ─────────────────────────────────
+    # If user pre-selected → keep their choice; AI only enriches severity/priority
+    if not issue_type_obj:
+        # Try to match AI-generated type to a predefined IssueType record
+        if ai_issue_type_name:
+            issue_type_obj = await _get_issue_type_by_name(ai_issue_type_name, db)
+            # If no exact match, dynamic type — issue_type_id stays None,
+            # but we store the string in category
+
+    # Determine final category string (issue type label shown in UI)
+    final_category: str = (
+        issue_type_obj.name
+        if issue_type_obj
+        else (ai_issue_type_name or category or "Civic Issue")
+    )
+
+    # ── Step 7: Department assignment ─────────────────────────────────────
+    dept_id: Optional[str] = None
+
+    if issue_type_obj and issue_type_obj.department_id:
+        # Best: from predefined IssueType FK
+        dept_id = issue_type_obj.department_id
+    elif ai_department_name:
+        # Second: from AI result (already validated in ai_service)
+        dept_obj = await _get_department_by_name(ai_department_name, db)
+        if dept_obj:
+            dept_id = dept_obj.id
+    
+    if not dept_id:
+        # Third: infer from category text
+        inferred_dept_name = infer_department(
+            f"{final_category} {title} {description}", resolved_area_type
+        )
+        dept_obj = await _get_department_by_name(inferred_dept_name, db)
+        if dept_obj:
+            dept_id = dept_obj.id
+
+    # ── Create Issue record ────────────────────────────────────────────────
     issue = Issue(
         title=title,
         description=description,
         latitude=latitude,
         longitude=longitude,
-        address=address,
-        context=context,
+        address=resolved_address if resolved_address else address,
+        context=resolved_area_type if resolved_area_type != "unknown" else (context or None),
         issue_type_id=issue_type_obj.id if issue_type_obj else None,
-        department_id=issue_type_obj.department_id if issue_type_obj else None,
-        category=issue_type_obj.name if issue_type_obj else None,
+        department_id=dept_id,
+        category=final_category,
         reporter_id=current_user.id,
         status="not_assigned",
+        # Apply AI severity/priority
+        ai_confidence=ai_result.get("confidence"),
+        ai_reasoning=ai_result.get("reasoning"),
+        severity=ai_result.get("predicted_severity", "medium"),
+        priority=ai_result.get("predicted_priority", 3),
     )
     db.add(issue)
     await db.flush()
 
-    # Upload images
-    uploaded_urls = []
-    for img in images:
-        if img.filename:
-            url = await upload_image(img, folder="issues")
-            media = IssueMedia(issue_id=issue.id, url=url, upload_phase="before")
-            db.add(media)
-            uploaded_urls.append(url)
+    # ── Link uploaded media ────────────────────────────────────────────────
+    for url in uploaded_urls:
+        db.add(IssueMedia(issue_id=issue.id, url=url, upload_phase="before"))
 
-    # ── AI Analysis ────────────────────────────────────────────────────────
-    image_url = uploaded_urls[0] if uploaded_urls else None
-    ai_result = await analyze_issue(title, description, image_url)
-
-    # Look up issue_type in DB from AI output (if not already set by user)
-    ai_issue_type_name = ai_result.get("issue_type", "")
-    if not issue_type_obj and ai_issue_type_name:
-        issue_type_obj = await _get_issue_type_by_name(ai_issue_type_name, db)
-        if issue_type_obj:
-            issue.issue_type_id = issue_type_obj.id
-            issue.department_id = issue_type_obj.department_id
-            issue.category = issue_type_obj.name
-
-    # Save AI prediction record using predicted_category for compatibility
+    # ── Save AI prediction record ──────────────────────────────────────────
     prediction = AIPrediction(
         issue_id=issue.id,
-        predicted_category=ai_result.get("issue_type"),          # stores issue_type name
-        predicted_department=ai_result.get("department"),
+        predicted_category=final_category,          # dynamic or predefined string
+        predicted_department=ai_department_name,
         predicted_severity=ai_result.get("predicted_severity"),
         predicted_priority=ai_result.get("predicted_priority"),
         confidence=ai_result.get("confidence"),
@@ -149,13 +224,7 @@ async def create_issue(
     )
     db.add(prediction)
 
-    # Apply AI severity/priority to issue
-    issue.ai_confidence = ai_result.get("confidence")
-    issue.ai_reasoning = ai_result.get("reasoning")
-    issue.severity = ai_result.get("predicted_severity", "medium")
-    issue.priority = ai_result.get("predicted_priority", 3)
-
-    # Status history
+    # ── Status history ─────────────────────────────────────────────────────
     db.add(StatusHistory(
         issue_id=issue.id,
         from_status=None,
@@ -166,7 +235,6 @@ async def create_issue(
 
     await db.flush()
     await db.refresh(issue)
-
     return IssueOut.model_validate(issue)
 
 
@@ -203,13 +271,9 @@ async def list_issues(
         query = query.where(Issue.severity == severity)
 
     query = query.order_by(
-        case(
-            (Issue.status == "closed", 1),
-            else_=0
-        ).asc(),
+        case((Issue.status == "closed", 1), else_=0).asc(),
         Issue.updated_at.desc()
-    )
-    query = query.offset((page - 1) * page_size).limit(page_size)
+    ).offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(query)
     issues = result.scalars().all()
@@ -238,7 +302,6 @@ async def get_issue(
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Citizens can only view their own issues
     if current_user.role == "citizen" and issue.reporter_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -247,7 +310,6 @@ async def get_issue(
         out.ai_confidence = None
         out.ai_reasoning = None
         out.ai_predictions = []
-
     return out
 
 
@@ -260,21 +322,21 @@ async def verify_issue(
     db: AsyncSession = Depends(get_db),
 ):
     """Citizen verifies a resolved issue — can approve or reject."""
-    result = await db.execute(select(Issue).where((Issue.id == issue_id) & (Issue.is_deleted == False)))
+    result = await db.execute(
+        select(Issue).where((Issue.id == issue_id) & (Issue.is_deleted == False))
+    )
     issue = result.scalar_one_or_none()
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
     if issue.reporter_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the reporter can verify")
-
     if issue.status == "closed":
-        raise HTTPException(status_code=400, detail="Issue is already closed and cannot be modified")
-
+        raise HTTPException(status_code=400, detail="Issue is already closed")
     if issue.status != "resolved":
         raise HTTPException(status_code=400, detail="Issue must be in 'resolved' status to verify")
 
-    # Create vote
+    from app.models.verification_vote import VerificationVote
     vote = VerificationVote(
         issue_id=issue_id,
         voter_id=current_user.id,
@@ -287,8 +349,8 @@ async def verify_issue(
 
     issue.citizen_rating = data.rating
     issue.citizen_feedback = data.feedback
-
     old_status = issue.status
+
     if data.approved:
         issue.status = "closed"
         issue.closed_at = datetime.utcnow()
@@ -306,15 +368,13 @@ async def verify_issue(
         db.add(StatusHistory(
             issue_id=issue.id, from_status=old_status, to_status="reopened",
             changed_by=current_user.id,
-            notes=f"Citizen rejected resolution. Reason: {data.rejection_reason or 'Not satisfied'}. Priority increased. Officer cleared for reassignment."
+            notes=f"Citizen rejected resolution. Reason: {data.rejection_reason or 'Not satisfied'}. Priority increased."
         ))
 
     await db.flush()
 
-    # Re-fetch full detail
     result = await db.execute(_full_citizen_query(issue_id))
     issue = result.scalar_one_or_none()
-
     out = IssueDetailOut.model_validate(issue)
     out.ai_confidence = None
     out.ai_reasoning = None
@@ -331,8 +391,10 @@ async def upload_issue_media(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload additional media to an issue."""
-    result = await db.execute(select(Issue).where((Issue.id == issue_id) & (Issue.is_deleted == False)))
+    """Upload additional media to an existing issue."""
+    result = await db.execute(
+        select(Issue).where((Issue.id == issue_id) & (Issue.is_deleted == False))
+    )
     issue = result.scalar_one_or_none()
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
@@ -358,7 +420,6 @@ async def delete_issue(
 
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
-
     if current_user.role != "admin" and issue.reporter_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this issue")
 

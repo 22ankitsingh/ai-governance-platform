@@ -6,53 +6,48 @@ import StatusBadge, { SeverityBadge, PriorityBadge } from '../../components/Stat
 export default function MyIssues() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ status: '', issue_type_id: \'\', severity: '' });
+  const [filters, setFilters] = useState({ status: '', severity: '' });
 
-  const load = () => {
-    setLoading(true);
-    const params = { page_size: 50 };
+  useEffect(() => {
+    const params = {};
     if (filters.status) params.status = filters.status;
-    if (filters.issue_type_id) params.issue_type_id = filters.issue_type_id;
     if (filters.severity) params.severity = filters.severity;
-    issuesAPI.list(params).then(r => setIssues(r.data)).catch(() => {}).finally(() => setLoading(false));
+    
+    issuesAPI.list(params)
+      .then(r => setIssues(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [filters]);
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
   };
-
-  useEffect(() => { load(); }, [filters]);
-
-  const sortedIssues = [...issues].sort((a, b) => {
-    if (a.status === "closed" && b.status !== "closed") return 1;
-    if (a.status !== "closed" && b.status === "closed") return -1;
-    return new Date(b.updated_at) - new Date(a.updated_at);
-  });
-
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>My Issues</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{issues.length} issues reported</p>
+      <div className="page-header" style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.5rem' }}>My Reported Issues</h1>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <select className="form-input" style={{ width: '150px' }}
+            value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
+            <option value="">All Statuses</option>
+            <option value="not_assigned">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+            <option value="reopened">Reopened</option>
+          </select>
+          <select className="form-input" style={{ width: '150px' }}
+            value={filters.severity} onChange={e => setFilters(f => ({ ...f, severity: e.target.value }))}>
+            <option value="">All Severity</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
         </div>
-        <Link to="/dashboard/submit" className="btn btn-primary">➕ New Issue</Link>
-      </div>
-
-      <div className="filters-bar">
-        <select className="filter-select" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
-          <option value="">All Statuses</option>
-          <option value="not_assigned">Not Assigned</option>
-          <option value="in_progress">In Progress</option>
-          <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
-          <option value="reopened">Reopened</option>
-        </select>
-        <select className="filter-select" value={filters.severity} onChange={e => setFilters(f => ({ ...f, severity: e.target.value }))}>
-          <option value="">All Severities</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="critical">Critical</option>
-        </select>
       </div>
 
       {loading ? (
@@ -61,39 +56,51 @@ export default function MyIssues() {
         <div className="empty-state">
           <div className="empty-state-icon">📋</div>
           <h3>No issues found</h3>
-          <p>{filters.status || filters.severity ? 'Try changing your filters' : 'Report your first issue to get started'}</p>
-          <Link to="/dashboard/submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>Report Issue</Link>
+          <p>You haven't reported any issues matching the selected filters.</p>
+          <Link to="/dashboard/report" className="btn btn-primary" style={{ marginTop: '1rem' }}>Report New Issue</Link>
         </div>
       ) : (
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Issue</th>
-                <th>Category</th>
-                <th>Status</th>
-                <th>Severity</th>
-                <th>Priority</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedIssues.map(issue => (
-                <tr key={issue.id}>
-                  <td>
-                    <Link to={`/dashboard/issues/${issue.id}`} style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {issue.title}
-                    </Link>
-                  </td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{issue.issue_type?.name || '—'}</td>
-                  <td><StatusBadge status={issue.status} /></td>
-                  <td><SeverityBadge severity={issue.severity} /></td>
-                  <td><PriorityBadge priority={issue.priority} /></td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{formatDate(issue.created_at)}</td>
+        <div className="card" style={{ padding: 0 }}>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Issue</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Severity</th>
+                  <th>Priority</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {issues.map(issue => (
+                  <tr key={issue.id}>
+                    <td style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{formatDate(issue.created_at)}</td>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{issue.title}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>ID: {issue.id.slice(0, 8)}</div>
+                    </td>
+                    <td style={{ fontSize: '0.82rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        {issue.category || issue.issue_type?.name || '—'}
+                        {!issue.issue_type_id && issue.category && (
+                          <span style={{ fontSize: '0.6rem', fontWeight: 900, background: 'rgba(51,129,255,0.1)', color: 'var(--primary-600)', padding: '0.1rem 0.3rem', borderRadius: '3px' }}>AI</span>
+                        )}
+                      </div>
+                    </td>
+                    <td><StatusBadge status={issue.status} /></td>
+                    <td><SeverityBadge severity={issue.severity} /></td>
+                    <td><PriorityBadge priority={issue.priority} /></td>
+                    <td>
+                      <Link to={`/dashboard/issues/${issue.id}`} className="btn btn-sm btn-ghost">Details</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

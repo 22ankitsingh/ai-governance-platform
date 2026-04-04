@@ -104,7 +104,14 @@ export default function IssueDetail() {
             <StatusBadge status={issue.status} />
             <SeverityBadge severity={issue.severity} />
             <PriorityBadge priority={issue.priority} />
-            {issue.issue_type?.name && <span className="badge" style={{ background: 'var(--primary-50)', color: 'var(--primary-700)' }}>{issue.issue_type?.name}</span>}
+            {(issue.category || issue.issue_type?.name) && (
+              <span className="badge" style={{ background: 'var(--primary-50)', color: 'var(--primary-700)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {issue.category || issue.issue_type?.name}
+                {!issue.issue_type_id && issue.category && (
+                  <span style={{ fontSize: '0.6rem', fontWeight: 900, opacity: 0.8 }}>AI</span>
+                )}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -142,7 +149,18 @@ export default function IssueDetail() {
             <div className="card" style={{ marginBottom: '1rem' }}>
               <div className="card-body">
                 <div style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
-                  <strong>Category:</strong> {issue.issue_type?.name || '—'}
+                  <strong>Category:</strong> {issue.category || issue.issue_type?.name || '—'}
+                  {!issue.issue_type_id && issue.category && (
+                    <span style={{
+                      marginLeft: '0.35rem',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      padding: '0.1rem 0.35rem',
+                      borderRadius: '3px',
+                      background: 'rgba(51,129,255,0.15)',
+                      color: 'var(--primary-500)',
+                    }}>AI</span>
+                  )}
                 </div>
 
                 <div style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>

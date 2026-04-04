@@ -92,7 +92,20 @@ export default function AdminDashboard() {
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>by {issue.reporter.full_name}</div>
                       )}
                     </td>
-                    <td style={{ fontSize: '0.82rem' }}>{issue.issue_type?.name || '—'}</td>
+                    <td style={{ fontSize: '0.82rem' }}>
+                      {issue.category || issue.issue_type?.name || '—'}
+                      {!issue.issue_type_id && issue.category && (
+                        <span style={{
+                          marginLeft: '0.35rem',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          padding: '0.1rem 0.35rem',
+                          borderRadius: '3px',
+                          background: 'rgba(51,129,255,0.15)',
+                          color: 'var(--primary-500)',
+                        }}>AI</span>
+                      )}
+                    </td>
                     <td><StatusBadge status={issue.status} /></td>
                     <td><SeverityBadge severity={issue.severity} /></td>
                     <td><PriorityBadge priority={issue.priority} /></td>

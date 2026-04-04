@@ -184,9 +184,24 @@ export default function IssueManage() {
             <div className="card-body">
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.7 }}>{issue.description}</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.82rem' }}>
-                <div><strong>Issue Type:</strong> {issue.issue_type?.name || '—'}</div>
+                <div>
+                  <strong>Issue Type:</strong>{' '}
+                  <span>{issue.category || issue.issue_type?.name || '—'}</span>
+                  {!issue.issue_type_id && issue.category && (
+                    <span style={{
+                      marginLeft: '0.4rem',
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      padding: '0.1rem 0.4rem',
+                      borderRadius: '4px',
+                      background: 'rgba(51,129,255,0.15)',
+                      color: 'var(--primary-500)',
+                      letterSpacing: '0.02em',
+                    }}>AI</span>
+                  )}
+                </div>
                 <div><strong>Department:</strong> {issue.department?.name || '—'}</div>
-                <div><strong>Context:</strong> {issue.context || '—'}</div>
+                <div><strong>Area Type:</strong> {issue.context || '—'}</div>
                 <div><strong>Address:</strong> {issue.address || '—'}</div>
                 <div><strong>Officer:</strong> {issue.officer_name || '—'}</div>
                 <div><strong>Reopened:</strong> {issue.reopen_count} time(s)</div>

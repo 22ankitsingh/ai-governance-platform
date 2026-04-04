@@ -82,7 +82,20 @@ export default function CitizenDashboard() {
                     style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border-light)', color: 'inherit', textDecoration: 'none' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{issue.issue_type?.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        {issue.category || issue.issue_type?.name || '—'}
+                        {!issue.issue_type_id && issue.category && (
+                          <span style={{
+                            fontSize: '0.6rem',
+                            fontWeight: 700,
+                            padding: '0.05rem 0.3rem',
+                            borderRadius: '3px',
+                            background: 'rgba(51,129,255,0.1)',
+                            color: 'var(--primary-500)',
+                            border: '1px solid rgba(51,129,255,0.2)',
+                          }}>AI</span>
+                        )}
+                      </div>
                     </div>
                     <StatusBadge status={issue.status} />
                   </Link>
