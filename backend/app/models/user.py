@@ -21,6 +21,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = Column(Boolean, default=False)
+    deleted_at = Column(DateTime, nullable=True)
 
     issues = relationship("Issue", back_populates="reporter", foreign_keys="Issue.reporter_id")
     notifications = relationship("Notification", back_populates="user")

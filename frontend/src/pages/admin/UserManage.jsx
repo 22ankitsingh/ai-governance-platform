@@ -5,10 +5,6 @@ export default function UserManage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [userToDelete, setUserToDelete] = useState(null);
-  const [deleting, setDeleting] = useState(false);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -29,25 +25,6 @@ export default function UserManage() {
     fetchUsers();
   }, [search]);
 
-  const handleDelete = async () => {
-    if (!userToDelete) return;
-    setDeleting(true);
-    try {
-      await adminAPI.deleteUser(userToDelete.id);
-      setShowDeleteModal(false);
-      setUserToDelete(null);
-      fetchUsers();
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to delete user');
-    } finally {
-      setDeleting(false);
-    }
-  };
-  
-  const confirmDelete = (user) => {
-    setUserToDelete(user);
-    setShowDeleteModal(true);
-  };
 
   return (
     <div>
@@ -87,7 +64,6 @@ export default function UserManage() {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Registration Date</th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -98,14 +74,6 @@ export default function UserManage() {
                     </td>
                     <td>{u.email}</td>
                     <td>{new Date(u.created_at).toLocaleDateString('en-IN')}</td>
-                    <td>
-                      <button 
-                        className="btn btn-danger btn-sm" 
-                        onClick={() => confirmDelete(u)}
-                      >
-                        Delete
-                      </button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -114,24 +82,6 @@ export default function UserManage() {
         )}
       </div>
 
-      {showDeleteModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <div className="card-header"><h3>⚠️ Delete User</h3></div>
-            <div className="card-body">
-              <p style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
-                Are you sure you want to delete <strong>{userToDelete?.full_name}</strong>? This action cannot be undone.
-              </p>
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                <button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)} disabled={deleting}>Cancel</button>
-                <button className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
-                  {deleting ? 'Deleting...' : 'Yes, Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -413,7 +413,7 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin: list all citizen users."""
-    query = select(User).where(User.role == "citizen")
+    query = select(User).where((User.role == "citizen") & (User.is_deleted == False))
     
     if search:
         query = query.where(
@@ -426,23 +426,11 @@ async def list_users(
     return [UserOut.model_validate(u) for u in result.scalars().all()]
 
 
-@router.delete("/users/{user_id}", status_code=204)
+@router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
     admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
 ):
-    """Admin: delete a user."""
-    # Prevent self-deletion
-    if admin.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
+    """Admin: delete a user (Disabled)."""
+    raise HTTPException(status_code=403, detail="Admin is not permitted to delete users")
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    await db.delete(user)
-    await db.commit()
-    return None

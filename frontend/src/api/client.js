@@ -38,6 +38,14 @@ export const authAPI = {
   me: () => api.get('/auth/me'),
 };
 
+// ===== Users =====
+export const usersAPI = {
+  me: () => api.get('/users/me'),
+  updateProfile: (data) => api.put('/users/me', data),
+  updatePassword: (data) => api.put('/users/me/password', data),
+  deleteAccount: () => api.delete('/users/me'),
+};
+
 // ===== Issues =====
 export const issuesAPI = {
   create: (formData) => api.post('/issues', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
@@ -60,7 +68,6 @@ export const adminAPI = {
   listOfficers: (params) => api.get('/admin/officers', { params }),
   getAuditLog: (params) => api.get('/admin/audit-log', { params }),
   listUsers: (params) => api.get('/admin/users', { params }),
-  deleteUser: (id) => api.delete(`/admin/users/${id}`),
 };
 
 // ===== Analytics =====

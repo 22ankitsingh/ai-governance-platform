@@ -193,7 +193,7 @@ async def get_issue(
     return out
 
 
-@router.post("/{issue_id}/verify", response_model=VerificationVoteOut)
+@router.post("/{issue_id}/verify", response_model=IssueDetailOut)
 async def verify_issue(
     issue_id: str,
     data: VerificationVoteCreate,
@@ -254,8 +254,20 @@ async def verify_issue(
         ))
 
     await db.flush()
-    await db.refresh(vote)
-    return VerificationVoteOut.model_validate(vote)
+    # Fetch full detail to return IssueDetailOut
+    query = select(Issue).where(Issue.id == issue_id).options(
+        selectinload(Issue.reporter),
+        selectinload(Issue.department),
+        selectinload(Issue.media),
+        selectinload(Issue.verification_votes),
+        selectinload(Issue.status_history),
+        selectinload(Issue.assignment_history),
+    )
+    result = await db.execute(query)
+    issue = result.scalar_one_or_none()
+    
+    print(f"DEBUG: Issue {issue_id} verified by {current_user.email}. New status: {issue.status}")
+    return IssueDetailOut.model_validate(issue)
 
 
 @router.post("/{issue_id}/upload", response_model=MediaOut)

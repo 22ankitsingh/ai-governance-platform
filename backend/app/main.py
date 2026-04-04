@@ -52,6 +52,7 @@ app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads"
 
 # Register routers
 from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
 from app.routers.issues import router as issues_router
 from app.routers.admin import router as admin_router
 from app.routers.analytics import router as analytics_router
@@ -59,6 +60,7 @@ from app.routers.notifications import router as notifications_router
 from app.routers.reference import router as reference_router
 
 app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(issues_router)
 app.include_router(admin_router)
 app.include_router(analytics_router)

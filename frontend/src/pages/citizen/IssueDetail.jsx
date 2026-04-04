@@ -12,23 +12,32 @@ export default function IssueDetail() {
   const [loading, setLoading] = useState(true);
   const [verifyForm, setVerifyForm] = useState({ approved: true, rating: 5, feedback: '', rejection_reason: '' });
   const [verifying, setVerifying] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState('');
   const [activeTab, setActiveTab] = useState('details');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
+    console.log(`[IssueDetail] Fetching issue ${id}`);
     issuesAPI.get(id).then(r => setIssue(r.data)).catch(() => navigate('/dashboard/issues')).finally(() => setLoading(false));
   }, [id]);
 
   const handleVerify = async () => {
+    console.log('[IssueDetail] Submitting verification:', verifyForm);
     setVerifying(true);
     setVerifyMsg('');
     try {
-      await issuesAPI.verify(id, verifyForm);
-      setVerifyMsg(verifyForm.approved ? 'Thank you! Issue has been closed.' : 'Issue has been reopened for further review.');
-      const r = await issuesAPI.get(id);
-      setIssue(r.data);
+      const res = await issuesAPI.verify(id, verifyForm);
+      console.log('[IssueDetail] Verification successful:', res.data);
+      
+      // Update local issue state with full returned detail
+      setIssue(res.data);
+      
+      // Show success message and reset tab
+      setVerifyMsg(verifyForm.approved ? 'Resolution approved. This issue is now CLOSED.' : 'Resolution rejected. This issue has been REOPENED.');
+      setActiveTab('details');
     } catch (err) {
+      console.error('[IssueDetail] Verification failed:', err);
       setVerifyMsg(err.response?.data?.detail || 'Verification failed');
     } finally {
       setVerifying(false);
@@ -81,6 +90,13 @@ export default function IssueDetail() {
         </div>
       )}
 
+      {verifyMsg && (
+        <div className={`alert ${issue.status === 'closed' ? 'alert-success' : (issue.status === 'reopened' ? 'alert-warning' : 'alert-error')}`} 
+           style={{ marginBottom: '1.5rem' }}>
+          {verifyMsg}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: '1.35rem', marginBottom: '0.5rem' }}>{issue.title}</h1>
@@ -120,8 +136,6 @@ export default function IssueDetail() {
                 </div>
               </div>
             )}
-
-
           </div>
 
           <div>
@@ -203,8 +217,6 @@ export default function IssueDetail() {
         <div className="card" style={{ maxWidth: '600px' }}>
           <div className="card-header"><h3>Verify Resolution</h3></div>
           <div className="card-body">
-            {verifyMsg && <div className={`alert ${verifyForm.approved ? 'alert-success' : 'alert-warning'}`}>{verifyMsg}</div>}
-
             <div className="form-group">
               <label className="form-label">Is the issue resolved satisfactorily?</label>
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>

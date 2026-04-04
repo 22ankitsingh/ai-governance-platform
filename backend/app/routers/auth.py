@@ -46,6 +46,9 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account deactivated")
 
+    if getattr(user, 'is_deleted', False):
+        raise HTTPException(status_code=403, detail="Account deleted")
+
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(
         access_token=token,

@@ -84,6 +84,9 @@ export default function Sidebar({ isOpen, onClose }) {
                   <span className="sidebar-link-icon">🔔</span> Notifications
                   {unread > 0 && <span className="notification-count" style={{ position: 'static', marginLeft: 'auto' }}>{unread}</span>}
                 </NavLink>
+                <NavLink to="/dashboard/profile" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`} onClick={onClose}>
+                  <span className="sidebar-link-icon">👤</span> Profile
+                </NavLink>
               </div>
             </>
           )}

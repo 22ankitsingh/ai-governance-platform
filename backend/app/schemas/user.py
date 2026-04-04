@@ -15,6 +15,16 @@ class UserLogin(BaseModel):
     password: str
 
 
+class UserUpdateProfile(BaseModel):
+    full_name: str
+    phone: Optional[str] = None
+
+
+class UserUpdatePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class UserOut(BaseModel):
     id: str
     email: str

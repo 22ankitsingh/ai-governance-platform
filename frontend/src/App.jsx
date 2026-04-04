@@ -14,6 +14,7 @@ import SubmitIssue from './pages/citizen/SubmitIssue';
 import MyIssues from './pages/citizen/MyIssues';
 import IssueDetail from './pages/citizen/IssueDetail';
 import Notifications from './pages/citizen/Notifications';
+import Profile from './pages/citizen/Profile';
 
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -56,6 +57,7 @@ function AppRoutes() {
         <Route path="issues" element={<MyIssues />} />
         <Route path="issues/:id" element={<IssueDetail />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
 
       {/* Admin routes */}
