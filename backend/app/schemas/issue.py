@@ -10,13 +10,13 @@ class IssueCreate(BaseModel):
     longitude: Optional[float] = None
     address: Optional[str] = None
     context: Optional[str] = None
-    category: Optional[str] = None
+    issue_type_id: Optional[str] = None   # New primary field
 
 
 class IssueUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    category: Optional[str] = None
+    issue_type_id: Optional[str] = None
     severity: Optional[str] = None
     priority: Optional[int] = None
 
@@ -27,7 +27,7 @@ class StatusUpdate(BaseModel):
 
 
 class AdminOverride(BaseModel):
-    category: Optional[str] = None
+    issue_type_id: Optional[str] = None   # New primary field; auto-assigns department
     department_id: Optional[str] = None
     officer_label_id: Optional[str] = None
     severity: Optional[str] = None
@@ -35,6 +35,8 @@ class AdminOverride(BaseModel):
     status: Optional[str] = None
     resolution_notes: Optional[str] = None
     notes: Optional[str] = None
+    # Legacy — still accepted but ignored if issue_type_id provided
+    category: Optional[str] = None
 
 
 class AssignOfficerRequest(BaseModel):
@@ -137,6 +139,15 @@ class DepartmentOut(BaseModel):
         from_attributes = True
 
 
+class IssueTypeOut(BaseModel):
+    id: str
+    name: str
+    department_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class OfficerLabelOut(BaseModel):
     id: str
     name: str
@@ -154,6 +165,9 @@ class IssueOut(BaseModel):
     longitude: Optional[float] = None
     address: Optional[str] = None
     context: Optional[str] = None
+    # New structured classification
+    issue_type_id: Optional[str] = None
+    # Legacy field for backward compatibility
     category: Optional[str] = None
     severity: str
     priority: int
@@ -180,12 +194,14 @@ class IssueOut(BaseModel):
 class IssueListOut(IssueOut):
     reporter: Optional[ReporterOut] = None
     department: Optional[DepartmentOut] = None
+    issue_type: Optional[IssueTypeOut] = None
     media_count: Optional[int] = 0
 
 
 class IssueDetailOut(IssueOut):
     reporter: Optional[ReporterOut] = None
     department: Optional[DepartmentOut] = None
+    issue_type: Optional[IssueTypeOut] = None
     officer_label: Optional[OfficerLabelOut] = None
     media: List[MediaOut] = []
     ai_predictions: List[AIPredictionOut] = []

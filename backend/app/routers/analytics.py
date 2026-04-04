@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.issue import Issue
 from app.models.ai_prediction import AIPrediction
 from app.models.department import Department
+from app.models.issue_type import IssueType
 from app.middleware.auth import require_admin
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
@@ -23,26 +24,33 @@ async def get_overview(
     total_count = total.scalar() or 0
 
     resolved = await db.execute(
-        select(func.count(Issue.id)).where((Issue.status.in_(["resolved", "closed"])) & (Issue.is_deleted == False))
+        select(func.count(Issue.id)).where(
+            (Issue.status.in_(["resolved", "closed"])) & (Issue.is_deleted == False)
+        )
     )
     resolved_count = resolved.scalar() or 0
 
     reopened = await db.execute(
-        select(func.count(Issue.id)).where((Issue.reopen_count > 0) & (Issue.is_deleted == False))
+        select(func.count(Issue.id)).where(
+            (Issue.reopen_count > 0) & (Issue.is_deleted == False)
+        )
     )
     reopened_count = reopened.scalar() or 0
 
     pending = await db.execute(
-        select(func.count(Issue.id)).where((Issue.status.in_(["not_assigned", "in_progress", "reopened"])) & (Issue.is_deleted == False))
+        select(func.count(Issue.id)).where(
+            (Issue.status.in_(["not_assigned", "in_progress", "reopened"])) & (Issue.is_deleted == False)
+        )
     )
     pending_count = pending.scalar() or 0
 
     critical = await db.execute(
-        select(func.count(Issue.id)).where((Issue.severity == "critical") & (Issue.is_deleted == False))
+        select(func.count(Issue.id)).where(
+            (Issue.severity == "critical") & (Issue.is_deleted == False)
+        )
     )
     critical_count = critical.scalar() or 0
 
-    # Average resolution time — SQLite compatible using julianday
     avg_time_result = await db.execute(
         select(func.avg(
             func.julianday(Issue.closed_at) - func.julianday(Issue.created_at)
@@ -82,15 +90,43 @@ async def issues_by_department(
     return [{"department": row[0], "count": row[1]} for row in rows]
 
 
+@router.get("/by-issue-type")
+async def issues_by_issue_type(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Issues grouped by issue_type name, with department."""
+    query = (
+        select(
+            IssueType.name.label("issue_type"),
+            Department.name.label("department"),
+            func.count(Issue.id).label("count"),
+        )
+        .join(IssueType, Issue.issue_type_id == IssueType.id)
+        .join(Department, IssueType.department_id == Department.id)
+        .where(Issue.is_deleted == False)
+        .group_by(IssueType.name, Department.name)
+        .order_by(func.count(Issue.id).desc())
+    )
+    result = await db.execute(query)
+    rows = result.all()
+    return [
+        {"issue_type": row[0], "department": row[1], "count": row[2]}
+        for row in rows
+    ]
+
+
 @router.get("/by-category")
 async def issues_by_category(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """Backward-compatible endpoint — now delegates to by-issue-type logic."""
     query = (
-        select(Issue.category, func.count(Issue.id).label("count"))
-        .where((Issue.category.isnot(None)) & (Issue.is_deleted == False))
-        .group_by(Issue.category)
+        select(IssueType.name.label("category"), func.count(Issue.id).label("count"))
+        .join(IssueType, Issue.issue_type_id == IssueType.id)
+        .where(Issue.is_deleted == False)
+        .group_by(IssueType.name)
         .order_by(func.count(Issue.id).desc())
     )
     result = await db.execute(query)
@@ -135,6 +171,7 @@ async def ai_accuracy(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """AI prediction accuracy — compares predicted issue_type vs actual issue_type."""
     query = select(
         func.count(AIPrediction.id).label("total_predictions"),
         func.avg(AIPrediction.confidence).label("avg_confidence"),
@@ -142,10 +179,15 @@ async def ai_accuracy(
     result = await db.execute(query)
     row = result.one_or_none()
 
+    # Match: predicted_category (which now stores issue_type name) == IssueType.name on the issue
     match_query = (
         select(func.count(AIPrediction.id))
         .join(Issue, Issue.id == AIPrediction.issue_id)
-        .where((AIPrediction.predicted_category == Issue.category) & (Issue.is_deleted == False))
+        .join(IssueType, IssueType.id == Issue.issue_type_id)
+        .where(
+            (AIPrediction.predicted_category == IssueType.name) &
+            (Issue.is_deleted == False)
+        )
     )
     match_result = await db.execute(match_query)
     matches = match_result.scalar() or 0
@@ -167,14 +209,28 @@ async def geographic_data(
     db: AsyncSession = Depends(get_db),
 ):
     query = (
-        select(Issue.latitude, Issue.longitude, Issue.category, Issue.severity, Issue.status, Issue.title)
-        .where(and_(Issue.latitude.isnot(None), Issue.longitude.isnot(None), Issue.is_deleted == False))
+        select(
+            Issue.latitude, Issue.longitude,
+            Issue.severity, Issue.status, Issue.title,
+            IssueType.name.label("issue_type"),
+        )
+        .outerjoin(IssueType, IssueType.id == Issue.issue_type_id)
+        .where(and_(
+            Issue.latitude.isnot(None),
+            Issue.longitude.isnot(None),
+            Issue.is_deleted == False,
+        ))
     )
     result = await db.execute(query)
     rows = result.all()
     return [
-        {"lat": row[0], "lng": row[1], "category": row[2],
-         "severity": row[3], "status": row[4], "title": row[5]}
+        {
+            "lat": row[0], "lng": row[1],
+            "severity": row[2], "status": row[3], "title": row[4],
+            "issue_type": row[5],
+            # For backward compat
+            "category": row[5],
+        }
         for row in rows
     ]
 
@@ -186,7 +242,6 @@ async def issues_timeline(
     db: AsyncSession = Depends(get_db),
 ):
     since = datetime.utcnow() - timedelta(days=days)
-    # SQLite-compatible date grouping
     query = (
         select(
             func.date(Issue.created_at).label("day"),

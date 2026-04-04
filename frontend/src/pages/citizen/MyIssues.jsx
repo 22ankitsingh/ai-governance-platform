@@ -6,13 +6,13 @@ import StatusBadge, { SeverityBadge, PriorityBadge } from '../../components/Stat
 export default function MyIssues() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ status: '', category: '', severity: '' });
+  const [filters, setFilters] = useState({ status: '', issue_type_id: \'\', severity: '' });
 
   const load = () => {
     setLoading(true);
     const params = { page_size: 50 };
     if (filters.status) params.status = filters.status;
-    if (filters.category) params.category = filters.category;
+    if (filters.issue_type_id) params.issue_type_id = filters.issue_type_id;
     if (filters.severity) params.severity = filters.severity;
     issuesAPI.list(params).then(r => setIssues(r.data)).catch(() => {}).finally(() => setLoading(false));
   };
@@ -85,7 +85,7 @@ export default function MyIssues() {
                       {issue.title}
                     </Link>
                   </td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{issue.category || '—'}</td>
+                  <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{issue.issue_type?.name || '—'}</td>
                   <td><StatusBadge status={issue.status} /></td>
                   <td><SeverityBadge severity={issue.severity} /></td>
                   <td><PriorityBadge priority={issue.priority} /></td>

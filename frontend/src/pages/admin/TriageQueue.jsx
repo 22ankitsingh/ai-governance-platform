@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { adminAPI } from '../../api/client';
+import { adminAPI, referenceAPI } from '../../api/client';
 import StatusBadge, { SeverityBadge, PriorityBadge, ConfidenceMeter } from '../../components/StatusBadge';
 
 export default function TriageQueue() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState([]);
-  const [filters, setFilters] = useState({ status: '', category: '', severity: '', department_id: '', search: '' });
+  const [deptGroups, setDeptGroups] = useState([]); // [{department_id, department_name, issue_types:[{id,name}]}]
+  const [filters, setFilters] = useState({
+    status: '', issue_type_id: '', severity: '', department_id: '', search: ''
+  });
 
   useEffect(() => {
     adminAPI.listDepartments().then(r => setDepartments(r.data)).catch(() => {});
+    referenceAPI.categories().then(r => setDeptGroups(r.data)).catch(() => {});
   }, []);
 
   const load = () => {
@@ -29,6 +33,14 @@ export default function TriageQueue() {
   });
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
+
+  // All issue types flat list for filter (or filtered by selected dept)
+  const allIssueTypes = deptGroups.flatMap(g => g.issue_types.map(it => ({
+    ...it, department_name: g.department_name,
+  })));
+  const filteredIssueTypeOptions = filters.department_id
+    ? deptGroups.find(g => g.department_id === filters.department_id)?.issue_types || []
+    : allIssueTypes;
 
   return (
     <div>
@@ -57,18 +69,19 @@ export default function TriageQueue() {
           <option value="high">High</option>
           <option value="critical">Critical</option>
         </select>
-        <select className="filter-select" value={filters.department_id} onChange={e => setFilters(f => ({ ...f, department_id: e.target.value }))}>
+        <select className="filter-select" value={filters.department_id} onChange={e => setFilters(f => ({ ...f, department_id: e.target.value, issue_type_id: '' }))}>
           <option value="">All Departments</option>
           {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
-        <select className="filter-select" value={filters.category} onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}>
-          <option value="">All Categories</option>
-          <option value="Road & Infrastructure">Road & Infrastructure</option>
-          <option value="Water Issues">Water Issues</option>
-          <option value="Sanitation">Sanitation</option>
-          <option value="Public Safety">Public Safety</option>
-          <option value="Environment">Environment</option>
-          <option value="Health">Health</option>
+        <select
+          className="filter-select"
+          value={filters.issue_type_id}
+          onChange={e => setFilters(f => ({ ...f, issue_type_id: e.target.value }))}
+        >
+          <option value="">All Issue Types</option>
+          {filteredIssueTypeOptions.map(it => (
+            <option key={it.id} value={it.id}>{it.name}</option>
+          ))}
         </select>
       </div>
 
@@ -88,7 +101,8 @@ export default function TriageQueue() {
                 <th>Priority</th>
                 <th>Issue</th>
                 <th>Reporter</th>
-                <th>Category</th>
+                <th>Issue Type</th>
+                <th>Department</th>
                 <th>Status</th>
                 <th>Severity</th>
                 <th>AI Confidence</th>
@@ -111,7 +125,12 @@ export default function TriageQueue() {
                   <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                     {issue.reporter?.full_name || '—'}
                   </td>
-                  <td style={{ fontSize: '0.82rem' }}>{issue.category || '—'}</td>
+                  <td style={{ fontSize: '0.82rem' }}>{issue.issue_type?.name || '—'}</td>
+                  <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                    {issue.department?.name
+                      ? issue.department.name.split('&')[0].trim()  // abbreviate long names
+                      : '—'}
+                  </td>
                   <td><StatusBadge status={issue.status} /></td>
                   <td><SeverityBadge severity={issue.severity} /></td>
                   <td style={{ minWidth: 120 }}><ConfidenceMeter value={issue.ai_confidence} /></td>

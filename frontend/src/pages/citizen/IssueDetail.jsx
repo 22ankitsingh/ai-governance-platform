@@ -104,7 +104,7 @@ export default function IssueDetail() {
             <StatusBadge status={issue.status} />
             <SeverityBadge severity={issue.severity} />
             <PriorityBadge priority={issue.priority} />
-            {issue.category && <span className="badge" style={{ background: 'var(--primary-50)', color: 'var(--primary-700)' }}>{issue.category}</span>}
+            {issue.issue_type?.name && <span className="badge" style={{ background: 'var(--primary-50)', color: 'var(--primary-700)' }}>{issue.issue_type?.name}</span>}
           </div>
         </div>
       </div>
@@ -142,7 +142,7 @@ export default function IssueDetail() {
             <div className="card" style={{ marginBottom: '1rem' }}>
               <div className="card-body">
                 <div style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
-                  <strong>Category:</strong> {issue.category || '—'}
+                  <strong>Category:</strong> {issue.issue_type?.name || '—'}
                 </div>
 
                 <div style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>

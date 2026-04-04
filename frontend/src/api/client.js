@@ -74,7 +74,8 @@ export const adminAPI = {
 export const analyticsAPI = {
   overview: () => api.get('/analytics/overview'),
   byDepartment: () => api.get('/analytics/by-department'),
-  byCategory: () => api.get('/analytics/by-category'),
+  byIssueType: () => api.get('/analytics/by-issue-type'),    // NEW
+  byCategory: () => api.get('/analytics/by-category'),        // kept for backward compat
   byStatus: () => api.get('/analytics/by-status'),
   bySeverity: () => api.get('/analytics/by-severity'),
   aiAccuracy: () => api.get('/analytics/ai-accuracy'),
@@ -93,7 +94,8 @@ export const notificationsAPI = {
 // ===== Reference Data =====
 export const referenceAPI = {
   departments: () => api.get('/reference/departments'),
-  issueTypes: () => api.get('/reference/issue-types'),
+  issueTypes: (params) => api.get('/reference/issue-types', { params }),
+  // Returns [{department_id, department_name, department_code, issue_types: [{id, name}]}]
   categories: () => api.get('/reference/categories'),
 };
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { adminAPI } from '../../api/client';
+import { adminAPI, referenceAPI } from '../../api/client';
 import StatusBadge, { SeverityBadge, PriorityBadge, ConfidenceMeter } from '../../components/StatusBadge';
 import Timeline from '../../components/Timeline';
 import { MapView } from '../../components/MapPicker';
@@ -13,6 +13,8 @@ export default function IssueManage() {
   const [issue, setIssue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [departments, setDepartments] = useState([]);
+  const [deptGroups, setDeptGroups] = useState([]); // [{department_id, department_name, issue_types:[{id,name}]}]
+  const [filteredIssueTypes, setFilteredIssueTypes] = useState([]);
   const [updateForm, setUpdateForm] = useState({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -32,12 +34,19 @@ export default function IssueManage() {
     Promise.all([
       adminAPI.getIssue(id),
       adminAPI.listDepartments(),
-    ]).then(([issueRes, deptRes]) => {
+      referenceAPI.categories(),
+    ]).then(([issueRes, deptRes, catRes]) => {
       const i = issueRes.data;
       setIssue(i);
       setDepartments(deptRes.data);
+      setDeptGroups(catRes.data);
+      // Pre-populate filtered issue types from issue's current department
+      if (i.department_id) {
+        const group = catRes.data.find(g => g.department_id === i.department_id);
+        setFilteredIssueTypes(group ? group.issue_types : []);
+      }
       setUpdateForm({
-        category: i.category || '',
+        issue_type_id: i.issue_type_id || '',
         severity: i.severity,
         priority: i.priority,
         department_id: i.department_id || '',
@@ -49,7 +58,9 @@ export default function IssueManage() {
   }, [id]);
 
   const handleDeptChange = (deptId) => {
-    setUpdateForm(f => ({ ...f, department_id: deptId }));
+    const group = deptGroups.find(g => g.department_id === deptId);
+    setFilteredIssueTypes(group ? group.issue_types : []);
+    setUpdateForm(f => ({ ...f, department_id: deptId, issue_type_id: '' }));
   };
 
   const handleSave = async () => {
@@ -173,7 +184,8 @@ export default function IssueManage() {
             <div className="card-body">
               <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.7 }}>{issue.description}</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.82rem' }}>
-                <div><strong>Category:</strong> {issue.category || '—'}</div>
+                <div><strong>Issue Type:</strong> {issue.issue_type?.name || '—'}</div>
+                <div><strong>Department:</strong> {issue.department?.name || '—'}</div>
                 <div><strong>Context:</strong> {issue.context || '—'}</div>
                 <div><strong>Address:</strong> {issue.address || '—'}</div>
                 <div><strong>Officer:</strong> {issue.officer_name || '—'}</div>
@@ -291,12 +303,26 @@ export default function IssueManage() {
                       </select>
                     </div>
                   </div>
+                  {/* Department → Issue Type two-level selector */}
                   <div className="form-group">
                     <label className="form-label">Department</label>
                     <select className="form-select" value={updateForm.department_id} onChange={e => handleDeptChange(e.target.value)}>
-                      <option value="">Unassigned</option>
-                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      <option value="">— Select Department —</option>
+                      {deptGroups.map(g => <option key={g.department_id} value={g.department_id}>{g.department_name}</option>)}
                     </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Issue Type {updateForm.department_id ? '' : '(select department first)'}</label>
+                    <select
+                      className="form-select"
+                      value={updateForm.issue_type_id}
+                      onChange={e => setUpdateForm(f => ({ ...f, issue_type_id: e.target.value }))}
+                      disabled={!updateForm.department_id}
+                    >
+                      <option value="">— Select Issue Type —</option>
+                      {filteredIssueTypes.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                    </select>
+                    <div className="form-hint">Issue type auto-assigns the department</div>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Update Note (audit log)</label>
@@ -320,8 +346,8 @@ export default function IssueManage() {
             {latestPrediction ? (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Category</strong><div>{latestPrediction.predicted_category}</div></div>
-                  <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Department</strong><div>{latestPrediction.predicted_department}</div></div>
+                  <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Issue Type</strong><div>{latestPrediction.predicted_category || '—'}</div></div>
+                  <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Department</strong><div>{latestPrediction.predicted_department || '—'}</div></div>
                   <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Severity</strong><div><SeverityBadge severity={latestPrediction.predicted_severity} /></div></div>
                   <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Priority</strong><div>P{latestPrediction.predicted_priority}</div></div>
                   <div><strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Model</strong><div>{latestPrediction.model_version}</div></div>

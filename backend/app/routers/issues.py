@@ -8,6 +8,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.issue import Issue
+from app.models.issue_type import IssueType
 from app.models.issue_media import IssueMedia
 from app.models.ai_prediction import AIPrediction
 from app.models.verification_vote import VerificationVote
@@ -24,6 +25,51 @@ from app.services.notification_service import create_notification
 router = APIRouter(prefix="/api/issues", tags=["Issues"])
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _full_citizen_query(issue_id: str):
+    return (
+        select(Issue)
+        .where((Issue.id == issue_id) & (Issue.is_deleted == False))
+        .options(
+            selectinload(Issue.reporter),
+            selectinload(Issue.department),
+            selectinload(Issue.issue_type),
+            selectinload(Issue.officer_label),
+            selectinload(Issue.media),
+            selectinload(Issue.ai_predictions),
+            selectinload(Issue.verification_votes),
+            selectinload(Issue.status_history),
+            selectinload(Issue.assignment_history),
+        )
+    )
+
+
+async def _resolve_issue_type(
+    issue_type_id: Optional[str], db: AsyncSession
+) -> Optional[IssueType]:
+    """Fetch IssueType by id; raises 400 if id provided but not found."""
+    if not issue_type_id:
+        return None
+    result = await db.execute(
+        select(IssueType).where(IssueType.id == issue_type_id)
+    )
+    it = result.scalar_one_or_none()
+    if not it:
+        raise HTTPException(status_code=400, detail=f"Invalid issue_type_id: {issue_type_id}")
+    return it
+
+
+async def _get_issue_type_by_name(name: str, db: AsyncSession) -> Optional[IssueType]:
+    """Look up issue type by its name string (from AI result)."""
+    result = await db.execute(
+        select(IssueType).where(IssueType.name == name)
+    )
+    return result.scalar_one_or_none()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 @router.post("", response_model=IssueOut, status_code=201)
 async def create_issue(
     title: str = Form(...),
@@ -32,13 +78,25 @@ async def create_issue(
     longitude: Optional[float] = Form(None),
     address: Optional[str] = Form(None),
     context: Optional[str] = Form(None),
+    issue_type_id: Optional[str] = Form(None),   # NEW: citizen can pre-select
+    # Legacy field kept for backward compatibility — ignored if issue_type_id set
     category: Optional[str] = Form(None),
 
     images: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new issue with optional image uploads."""
+    """Create a new issue with optional image uploads.
+    
+    Accepts issue_type_id (preferred) or lets AI auto-classify.
+    Department is always auto-assigned from the issue_type.
+    Issue creation NEVER fails due to AI errors.
+    """
+    # Validate issue_type_id if provided
+    issue_type_obj: Optional[IssueType] = None
+    if issue_type_id:
+        issue_type_obj = await _resolve_issue_type(issue_type_id, db)
+
     issue = Issue(
         title=title,
         description=description,
@@ -46,7 +104,9 @@ async def create_issue(
         longitude=longitude,
         address=address,
         context=context,
-        category=category if category else None,
+        issue_type_id=issue_type_obj.id if issue_type_obj else None,
+        department_id=issue_type_obj.department_id if issue_type_obj else None,
+        category=issue_type_obj.name if issue_type_obj else None,
         reporter_id=current_user.id,
         status="not_assigned",
     )
@@ -62,15 +122,24 @@ async def create_issue(
             db.add(media)
             uploaded_urls.append(url)
 
-    # AI analysis
+    # ── AI Analysis ────────────────────────────────────────────────────────
     image_url = uploaded_urls[0] if uploaded_urls else None
     ai_result = await analyze_issue(title, description, image_url)
 
+    # Look up issue_type in DB from AI output (if not already set by user)
+    ai_issue_type_name = ai_result.get("issue_type", "")
+    if not issue_type_obj and ai_issue_type_name:
+        issue_type_obj = await _get_issue_type_by_name(ai_issue_type_name, db)
+        if issue_type_obj:
+            issue.issue_type_id = issue_type_obj.id
+            issue.department_id = issue_type_obj.department_id
+            issue.category = issue_type_obj.name
+
+    # Save AI prediction record using predicted_category for compatibility
     prediction = AIPrediction(
         issue_id=issue.id,
-        predicted_category=ai_result.get("predicted_category"),
-        predicted_subcategory=ai_result.get("predicted_subcategory"),
-        predicted_department=ai_result.get("predicted_department"),
+        predicted_category=ai_result.get("issue_type"),          # stores issue_type name
+        predicted_department=ai_result.get("department"),
         predicted_severity=ai_result.get("predicted_severity"),
         predicted_priority=ai_result.get("predicted_priority"),
         confidence=ai_result.get("confidence"),
@@ -80,23 +149,20 @@ async def create_issue(
     )
     db.add(prediction)
 
-    # Apply AI predictions to issue
+    # Apply AI severity/priority to issue
     issue.ai_confidence = ai_result.get("confidence")
     issue.ai_reasoning = ai_result.get("reasoning")
-    if not issue.category:
-        issue.category = ai_result.get("predicted_category")
     issue.severity = ai_result.get("predicted_severity", "medium")
     issue.priority = ai_result.get("predicted_priority", 3)
 
     # Status history
-    status_entry = StatusHistory(
+    db.add(StatusHistory(
         issue_id=issue.id,
         from_status=None,
         to_status="not_assigned",
         changed_by=current_user.id,
         notes="Issue created",
-    )
-    db.add(status_entry)
+    ))
 
     await db.flush()
     await db.refresh(issue)
@@ -104,10 +170,11 @@ async def create_issue(
     return IssueOut.model_validate(issue)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 @router.get("", response_model=List[IssueListOut])
 async def list_issues(
     status: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
+    issue_type_id: Optional[str] = Query(None),
     department_id: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -119,6 +186,7 @@ async def list_issues(
     query = select(Issue).where(Issue.is_deleted == False).options(
         selectinload(Issue.reporter),
         selectinload(Issue.department),
+        selectinload(Issue.issue_type),
         selectinload(Issue.media),
     )
 
@@ -127,8 +195,8 @@ async def list_issues(
 
     if status:
         query = query.where(Issue.status == status)
-    if category:
-        query = query.where(Issue.category == category)
+    if issue_type_id:
+        query = query.where(Issue.issue_type_id == issue_type_id)
     if department_id:
         query = query.where(Issue.department_id == department_id)
     if severity:
@@ -157,6 +225,7 @@ async def list_issues(
     return out
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 @router.get("/{issue_id}", response_model=IssueDetailOut)
 async def get_issue(
     issue_id: str,
@@ -164,18 +233,7 @@ async def get_issue(
     db: AsyncSession = Depends(get_db),
 ):
     """Get full issue detail with all related data."""
-    query = select(Issue).where((Issue.id == issue_id) & (Issue.is_deleted == False)).options(
-        selectinload(Issue.reporter),
-        selectinload(Issue.department),
-        selectinload(Issue.officer_label),
-        selectinload(Issue.media),
-        selectinload(Issue.ai_predictions),
-        selectinload(Issue.verification_votes),
-        selectinload(Issue.status_history),
-        selectinload(Issue.assignment_history),
-    )
-
-    result = await db.execute(query)
+    result = await db.execute(_full_citizen_query(issue_id))
     issue = result.scalar_one_or_none()
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
@@ -193,6 +251,7 @@ async def get_issue(
     return out
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 @router.post("/{issue_id}/verify", response_model=IssueDetailOut)
 async def verify_issue(
     issue_id: str,
@@ -226,13 +285,11 @@ async def verify_issue(
     )
     db.add(vote)
 
-    # Update issue based on verification
     issue.citizen_rating = data.rating
     issue.citizen_feedback = data.feedback
 
     old_status = issue.status
     if data.approved:
-        # Citizen approves → close the issue (FINAL)
         issue.status = "closed"
         issue.closed_at = datetime.utcnow()
         db.add(StatusHistory(
@@ -241,12 +298,11 @@ async def verify_issue(
             notes=f"Citizen verified and approved. Rating: {data.rating}/5" if data.rating else "Citizen verified and approved."
         ))
     else:
-        # Citizen rejects → reopen and increase priority
         issue.status = "reopened"
         issue.reopen_count += 1
-        issue.priority = max(1, issue.priority - 1)  # Increase priority (lower number)
+        issue.priority = max(1, issue.priority - 1)
         issue.resolved_at = None
-        issue.officer_name = None  # Clear officer so admin must reassign
+        issue.officer_name = None
         db.add(StatusHistory(
             issue_id=issue.id, from_status=old_status, to_status="reopened",
             changed_by=current_user.id,
@@ -254,22 +310,19 @@ async def verify_issue(
         ))
 
     await db.flush()
-    # Fetch full detail to return IssueDetailOut
-    query = select(Issue).where(Issue.id == issue_id).options(
-        selectinload(Issue.reporter),
-        selectinload(Issue.department),
-        selectinload(Issue.media),
-        selectinload(Issue.verification_votes),
-        selectinload(Issue.status_history),
-        selectinload(Issue.assignment_history),
-    )
-    result = await db.execute(query)
+
+    # Re-fetch full detail
+    result = await db.execute(_full_citizen_query(issue_id))
     issue = result.scalar_one_or_none()
-    
-    print(f"DEBUG: Issue {issue_id} verified by {current_user.email}. New status: {issue.status}")
-    return IssueDetailOut.model_validate(issue)
+
+    out = IssueDetailOut.model_validate(issue)
+    out.ai_confidence = None
+    out.ai_reasoning = None
+    out.ai_predictions = []
+    return out
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 @router.post("/{issue_id}/upload", response_model=MediaOut)
 async def upload_issue_media(
     issue_id: str,
@@ -292,22 +345,23 @@ async def upload_issue_media(
     return MediaOut.model_validate(media)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 @router.delete("/{issue_id}", status_code=204)
 async def delete_issue(
     issue_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an issue. Only the reporter or an admin can delete it."""
+    """Soft-delete an issue. Only the reporter or an admin can delete it."""
     result = await db.execute(select(Issue).where(Issue.id == issue_id))
     issue = result.scalar_one_or_none()
-    
+
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
-        
+
     if current_user.role != "admin" and issue.reporter_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this issue")
-        
+
     issue.is_deleted = True
     issue.deleted_at = datetime.utcnow()
     await db.commit()

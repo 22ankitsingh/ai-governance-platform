@@ -22,10 +22,15 @@ class Issue(Base):
     address = Column(Text, nullable=True)
     context = Column(String(20), nullable=True)
 
-    # Classification
+    # Classification (new structured system)
+    issue_type_id = Column(String(36), ForeignKey("issue_types.id"), nullable=True)
+    department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
+
+    # Legacy fields — kept for DB compatibility; category is auto-populated from issue_type.name
     category = Column(String(100), nullable=True)
     subcategory = Column(String(100), nullable=True)
-    department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
+
+    # Officer assignment
     officer_label_id = Column(String(36), ForeignKey("officer_labels.id"), nullable=True)
     officer_name = Column(String(255), nullable=True)
 
@@ -64,6 +69,7 @@ class Issue(Base):
     # Relationships
     reporter = relationship("User", back_populates="issues", foreign_keys=[reporter_id])
     department = relationship("Department", back_populates="issues")
+    issue_type = relationship("IssueType", back_populates="issues")
     officer_label = relationship("OfficerLabel")
     media = relationship("IssueMedia", back_populates="issue", cascade="all, delete-orphan")
     ai_predictions = relationship("AIPrediction", back_populates="issue", cascade="all, delete-orphan")

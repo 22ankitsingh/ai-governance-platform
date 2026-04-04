@@ -12,15 +12,15 @@ export default function Analytics() {
     Promise.all([
       analyticsAPI.overview(),
       analyticsAPI.byDepartment(),
-      analyticsAPI.byCategory(),
+      analyticsAPI.byIssueType(),
       analyticsAPI.byStatus(),
       analyticsAPI.bySeverity(),
       analyticsAPI.aiAccuracy(),
-    ]).then(([overview, byDept, byCat, byStatus, bySev, ai]) => {
+    ]).then(([overview, byDept, byIT, byStatus, bySev, ai]) => {
       setData({
         overview: overview.data,
         byDepartment: byDept.data,
-        byCategory: byCat.data,
+        byIssueType: byIT.data,
         byStatus: byStatus.data,
         bySeverity: bySev.data,
         aiAccuracy: ai.data,
@@ -76,15 +76,15 @@ export default function Analytics() {
           </div>
         </div>
 
-        {/* Issues by Category */}
+        {/* Issues by Issue Type */}
         <div className="card">
-          <div className="card-header"><h3>Issues by Category</h3></div>
+          <div className="card-header"><h3>Issues by Issue Type</h3></div>
           <div className="card-body">
-            {data.byCategory?.length > 0 ? (
+            {data.byIssueType?.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
-                  <Pie data={data.byCategory} dataKey="count" nameKey="category" cx="50%" cy="50%" outerRadius={100} label={({ category, count }) => `${category}: ${count}`} labelLine={false}>
-                    {data.byCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  <Pie data={data.byIssueType} dataKey="count" nameKey="issue_type" cx="50%" cy="50%" outerRadius={100} label={({ issue_type, count }) => `${issue_type}: ${count}`} labelLine={false}>
+                    {data.byIssueType.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                   <Tooltip />
                 </PieChart>

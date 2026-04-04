@@ -8,6 +8,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.issue import Issue
+from app.models.issue_type import IssueType
 from app.models.issue_media import IssueMedia
 from app.models.department import Department
 from app.models.officer_label import OfficerLabel
@@ -29,13 +30,12 @@ VALID_STATUSES = [
     "not_assigned", "in_progress", "resolved", "closed", "reopened",
 ]
 
-# Strict status transition map — defines which transitions are allowed
 ALLOWED_TRANSITIONS = {
     "not_assigned": ["in_progress"],
-    "in_progress": ["resolved"],
-    "resolved": ["closed", "reopened"],
-    "reopened": ["in_progress"],
-    "closed": [],  # FINAL — no transitions allowed
+    "in_progress":  ["resolved"],
+    "resolved":     ["closed", "reopened"],
+    "reopened":     ["in_progress"],
+    "closed":       [],  # FINAL
 }
 
 
@@ -44,6 +44,7 @@ def _full_issue_query(issue_id: str):
     return select(Issue).where((Issue.id == issue_id) & (Issue.is_deleted == False)).options(
         selectinload(Issue.reporter),
         selectinload(Issue.department),
+        selectinload(Issue.issue_type),
         selectinload(Issue.officer_label),
         selectinload(Issue.media),
         selectinload(Issue.ai_predictions),
@@ -53,10 +54,22 @@ def _full_issue_query(issue_id: str):
     )
 
 
+async def _resolve_issue_type(
+    issue_type_id: Optional[str], db: AsyncSession
+) -> Optional[IssueType]:
+    if not issue_type_id:
+        return None
+    result = await db.execute(select(IssueType).where(IssueType.id == issue_type_id))
+    it = result.scalar_one_or_none()
+    if not it:
+        raise HTTPException(status_code=400, detail=f"Invalid issue_type_id: {issue_type_id}")
+    return it
+
+
 @router.get("/issues", response_model=List[IssueListOut])
 async def admin_list_issues(
     status: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
+    issue_type_id: Optional[str] = Query(None),
     department_id: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
     priority: Optional[int] = Query(None),
@@ -72,13 +85,14 @@ async def admin_list_issues(
     query = select(Issue).where(Issue.is_deleted == False).options(
         selectinload(Issue.reporter),
         selectinload(Issue.department),
+        selectinload(Issue.issue_type),
         selectinload(Issue.media),
     )
 
     if status:
         query = query.where(Issue.status == status)
-    if category:
-        query = query.where(Issue.category == category)
+    if issue_type_id:
+        query = query.where(Issue.issue_type_id == issue_type_id)
     if department_id:
         query = query.where(Issue.department_id == department_id)
     if severity:
@@ -97,7 +111,7 @@ async def admin_list_issues(
             (Issue.status == "closed", 1),
             else_=0
         ).asc(),
-        Issue.priority.asc(), 
+        Issue.priority.asc(),
         Issue.updated_at.desc()
     )
     query = query.offset((page - 1) * page_size).limit(page_size)
@@ -135,8 +149,9 @@ async def admin_update_issue(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin: override AI predictions, update category/severity/priority/department.
-    Status changes are NOT allowed through this endpoint — use /assign or /resolve instead.
+    """Admin: override issue type, severity, priority, department.
+    Status changes are NOT allowed through this endpoint — use /assign or /resolve.
+    If issue_type_id is provided, department_id is auto-assigned from it.
     """
     query = _full_issue_query(issue_id)
     result = await db.execute(query)
@@ -144,16 +159,27 @@ async def admin_update_issue(
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
 
-    # Closed issues cannot be modified
     if issue.status == "closed":
         raise HTTPException(status_code=400, detail="Closed issues cannot be modified")
 
-    # Track changes
     old_status = issue.status
     assignment_changed = False
 
-    if data.category is not None:
-        issue.category = data.category
+    # Issue type update — auto-assigns department
+    if data.issue_type_id is not None:
+        it = await _resolve_issue_type(data.issue_type_id, db)
+        if it:
+            issue.issue_type_id = it.id
+            issue.department_id = it.department_id
+            issue.category = it.name   # keep legacy field in sync
+            assignment_changed = True
+        else:
+            issue.issue_type_id = None
+    elif data.department_id is not None:
+        # Fall back to manual department override if no issue_type_id
+        issue.department_id = data.department_id if data.department_id else None
+        assignment_changed = True
+
     if data.severity is not None:
         issue.severity = data.severity
     if data.priority is not None:
@@ -161,12 +187,7 @@ async def admin_update_issue(
     if data.resolution_notes is not None:
         issue.resolution_notes = data.resolution_notes
 
-    if data.department_id is not None:
-        issue.department_id = data.department_id if data.department_id else None
-        assignment_changed = True
-
-    # Status change through general update is still supported for backward compatibility
-    # but only valid transitions are allowed
+    # Status change — only valid transitions
     if data.status is not None and data.status != old_status:
         if data.status not in VALID_STATUSES:
             raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of {VALID_STATUSES}")
@@ -192,7 +213,6 @@ async def admin_update_issue(
             notes=data.notes,
         ))
 
-        # Notify citizen of status change
         await create_notification(
             db, issue.reporter_id,
             title=f"Issue Status Updated: {data.status.replace('_', ' ').title()}",
@@ -201,7 +221,6 @@ async def admin_update_issue(
             reference_id=issue.id,
         )
 
-        # Special notification for resolved — prompt verification
         if data.status == "resolved":
             await create_notification(
                 db, issue.reporter_id,
@@ -211,12 +230,11 @@ async def admin_update_issue(
                 reference_id=issue.id,
             )
 
-    # Assignment history
     if assignment_changed:
         db.add(AssignmentHistory(
             issue_id=issue.id,
             assigned_by=admin.id,
-            department_id=data.department_id or issue.department_id,
+            department_id=issue.department_id,
             officer_name=issue.officer_name,
             notes=data.notes,
         ))
@@ -224,8 +242,7 @@ async def admin_update_issue(
     issue.updated_at = datetime.utcnow()
     await db.flush()
 
-    # Re-fetch with all relations
-    result = await db.execute(query)
+    result = await db.execute(_full_issue_query(issue_id))
     issue = result.scalar_one_or_none()
 
     return IssueDetailOut.model_validate(issue)
@@ -238,9 +255,7 @@ async def assign_officer(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin: assign an officer to an issue. Only allowed when status is not_assigned or reopened.
-    Automatically transitions status to in_progress.
-    """
+    """Admin: assign an officer to an issue. Only when status is not_assigned or reopened."""
     query = _full_issue_query(issue_id)
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
@@ -258,25 +273,19 @@ async def assign_officer(
     issue.status = "in_progress"
     issue.updated_at = datetime.utcnow()
 
-    # Status history
     db.add(StatusHistory(
-        issue_id=issue.id,
-        from_status=old_status,
-        to_status="in_progress",
+        issue_id=issue.id, from_status=old_status, to_status="in_progress",
         changed_by=admin.id,
         notes=data.notes or f"Officer assigned: {data.officer_name}",
     ))
 
-    # Assignment history
     db.add(AssignmentHistory(
-        issue_id=issue.id,
-        assigned_by=admin.id,
+        issue_id=issue.id, assigned_by=admin.id,
         department_id=issue.department_id,
         officer_name=data.officer_name,
         notes=data.notes or f"Officer assigned: {data.officer_name}",
     ))
 
-    # Notify citizen
     await create_notification(
         db, issue.reporter_id,
         title="Officer Assigned to Your Issue",
@@ -287,7 +296,6 @@ async def assign_officer(
 
     await db.flush()
 
-    # Re-fetch
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
     return IssueDetailOut.model_validate(issue)
@@ -300,7 +308,7 @@ async def resolve_issue(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin: mark an issue as resolved. Only allowed when status is in_progress."""
+    """Admin: mark an issue as resolved. Only when status is in_progress."""
     query = _full_issue_query(issue_id)
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
@@ -318,16 +326,12 @@ async def resolve_issue(
     issue.resolved_at = datetime.utcnow()
     issue.updated_at = datetime.utcnow()
 
-    # Status history
     db.add(StatusHistory(
-        issue_id=issue.id,
-        from_status="in_progress",
-        to_status="resolved",
+        issue_id=issue.id, from_status="in_progress", to_status="resolved",
         changed_by=admin.id,
         notes=data.notes or f"Issue resolved. Notes: {data.resolution_notes}",
     ))
 
-    # Notify citizen to verify
     await create_notification(
         db, issue.reporter_id,
         title="Please Verify Resolution",
@@ -338,7 +342,6 @@ async def resolve_issue(
 
     await db.flush()
 
-    # Re-fetch
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
     return IssueDetailOut.model_validate(issue)
@@ -414,13 +417,13 @@ async def list_users(
 ):
     """Admin: list all citizen users."""
     query = select(User).where((User.role == "citizen") & (User.is_deleted == False))
-    
+
     if search:
         query = query.where(
             (User.full_name.ilike(f"%{search}%")) |
             (User.email.ilike(f"%{search}%"))
         )
-        
+
     query = query.order_by(User.created_at.desc())
     result = await db.execute(query)
     return [UserOut.model_validate(u) for u in result.scalars().all()]
@@ -433,4 +436,3 @@ async def delete_user(
 ):
     """Admin: delete a user (Disabled)."""
     raise HTTPException(status_code=403, detail="Admin is not permitted to delete users")
-
