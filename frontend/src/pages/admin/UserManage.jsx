@@ -5,7 +5,6 @@ export default function UserManage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('citizen');
   
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
@@ -16,7 +15,6 @@ export default function UserManage() {
     try {
       const params = {};
       if (search) params.search = search;
-      if (roleFilter) params.role = roleFilter;
       
       const res = await adminAPI.listUsers(params);
       setUsers(res.data);
@@ -29,7 +27,7 @@ export default function UserManage() {
 
   useEffect(() => {
     fetchUsers();
-  }, [search, roleFilter]);
+  }, [search]);
 
   const handleDelete = async () => {
     if (!userToDelete) return;
@@ -69,14 +67,6 @@ export default function UserManage() {
               onChange={e => setSearch(e.target.value)} 
             />
           </div>
-          <div style={{ width: '200px' }}>
-            <label className="form-label">Role</label>
-            <select className="form-select" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-              <option value="all">All Roles</option>
-              <option value="citizen">Citizen</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
         </div>
       </div>
 
@@ -96,7 +86,6 @@ export default function UserManage() {
                 <tr>
                   <th>Name</th>
                   <th>Email</th>
-                  <th>Role</th>
                   <th>Registration Date</th>
                   <th>Actions</th>
                 </tr>
@@ -108,11 +97,6 @@ export default function UserManage() {
                       <div style={{ fontWeight: 600 }}>{u.full_name}</div>
                     </td>
                     <td>{u.email}</td>
-                    <td>
-                      <span className={`badge ${u.role === 'admin' ? 'badge-critical' : 'badge-low'}`}>
-                        {u.role.toUpperCase()}
-                      </span>
-                    </td>
                     <td>{new Date(u.created_at).toLocaleDateString('en-IN')}</td>
                     <td>
                       <button 

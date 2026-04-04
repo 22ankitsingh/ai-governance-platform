@@ -408,19 +408,13 @@ async def get_audit_log(
 
 @router.get("/users", response_model=List[UserOut])
 async def list_users(
-    role: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin: list all users."""
-    query = select(User)
+    """Admin: list all citizen users."""
+    query = select(User).where(User.role == "citizen")
     
-    if role and role != "all":
-        query = query.where(User.role == role)
-    elif not role:
-        query = query.where(User.role == "citizen")
-        
     if search:
         query = query.where(
             (User.full_name.ilike(f"%{search}%")) |
