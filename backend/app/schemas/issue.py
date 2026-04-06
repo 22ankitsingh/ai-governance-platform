@@ -39,6 +39,10 @@ class AdminOverride(BaseModel):
     category: Optional[str] = None
 
 
+class AiFeedbackRequest(BaseModel):
+    is_correct: bool  # True = AI was correct, False = AI was wrong
+
+
 class AssignOfficerRequest(BaseModel):
     officer_name: str
     notes: Optional[str] = None
@@ -174,6 +178,7 @@ class IssueOut(BaseModel):
     status: str
     ai_confidence: Optional[float] = None
     ai_reasoning: Optional[str] = None
+    is_ai_correct: Optional[bool] = None  # Admin feedback on AI accuracy
     resolution_notes: Optional[str] = None
     reopen_count: int
     citizen_rating: Optional[int] = None

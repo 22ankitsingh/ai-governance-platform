@@ -44,6 +44,7 @@ class Issue(Base):
     # AI
     ai_confidence = Column(Float, nullable=True)
     ai_reasoning = Column(Text, nullable=True)
+    is_ai_correct = Column(Boolean, nullable=True)  # Admin feedback: True/False/None(not reviewed)
 
     # Resolution
     resolution_notes = Column(Text, nullable=True)

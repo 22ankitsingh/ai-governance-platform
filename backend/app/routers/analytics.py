@@ -171,35 +171,49 @@ async def ai_accuracy(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """AI prediction accuracy — compares predicted issue_type vs actual issue_type."""
-    query = select(
-        func.count(AIPrediction.id).label("total_predictions"),
-        func.avg(AIPrediction.confidence).label("avg_confidence"),
+    """AI prediction accuracy - based on admin feedback (is_ai_correct field on Issue)."""
+    # Overall prediction stats
+    total_result = await db.execute(
+        select(func.count(AIPrediction.id), func.avg(AIPrediction.confidence))
     )
-    result = await db.execute(query)
-    row = result.one_or_none()
+    total_row = total_result.one_or_none()
+    total_predictions = total_row[0] if total_row else 0
+    avg_conf = round(float(total_row[1]), 2) if total_row and total_row[1] else 0
 
-    # Match: predicted_category (which now stores issue_type name) == IssueType.name on the issue
-    match_query = (
-        select(func.count(AIPrediction.id))
-        .join(Issue, Issue.id == AIPrediction.issue_id)
-        .join(IssueType, IssueType.id == Issue.issue_type_id)
-        .where(
-            (AIPrediction.predicted_category == IssueType.name) &
-            (Issue.is_deleted == False)
+    # Admin-reviewed issues (is_ai_correct is not NULL)
+    reviewed_result = await db.execute(
+        select(func.count(Issue.id)).where(
+            and_(Issue.is_ai_correct.isnot(None), Issue.is_deleted == False)
         )
     )
-    match_result = await db.execute(match_query)
-    matches = match_result.scalar() or 0
+    total_reviewed = reviewed_result.scalar() or 0
 
-    total = row[0] if row else 0
-    avg_conf = round(float(row[1]), 2) if row and row[1] else 0
+    # Correct predictions (admin marked True)
+    correct_result = await db.execute(
+        select(func.count(Issue.id)).where(
+            and_(Issue.is_ai_correct == True, Issue.is_deleted == False)
+        )
+    )
+    correct_predictions = correct_result.scalar() or 0
+
+    # Incorrect predictions (admin marked False)
+    incorrect_result = await db.execute(
+        select(func.count(Issue.id)).where(
+            and_(Issue.is_ai_correct == False, Issue.is_deleted == False)
+        )
+    )
+    incorrect_predictions = incorrect_result.scalar() or 0
+
+    accuracy_rate = round((correct_predictions / total_reviewed) * 100, 1) if total_reviewed > 0 else 0
 
     return {
-        "total_predictions": total,
-        "category_matches": matches,
-        "accuracy_rate": round((matches / total) * 100, 1) if total > 0 else 0,
+        "total_predictions": total_predictions,
+        "total_reviewed": total_reviewed,
+        "correct_predictions": correct_predictions,
+        "incorrect_predictions": incorrect_predictions,
+        "accuracy_rate": accuracy_rate,
         "avg_confidence": avg_conf,
+        "category_matches": correct_predictions,  # legacy compat
     }
 
 

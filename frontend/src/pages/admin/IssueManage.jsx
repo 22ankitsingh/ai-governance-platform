@@ -371,9 +371,67 @@ export default function IssueManage() {
                   <strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Confidence</strong>
                   <div style={{ marginTop: '0.3rem' }}><ConfidenceMeter value={latestPrediction.confidence} /></div>
                 </div>
-                <div>
+                <div style={{ marginBottom: '1.25rem' }}>
                   <strong style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Reasoning</strong>
                   <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginTop: '0.3rem' }}>{latestPrediction.reasoning}</p>
+                </div>
+
+                {/* AI Feedback Section */}
+                <div style={{
+                  borderTop: '1px solid var(--border-light)',
+                  paddingTop: '1.25rem',
+                  marginTop: '0.5rem',
+                }}>
+                  <strong style={{ fontSize: '0.82rem', display: 'block', marginBottom: '0.75rem' }}>
+                    🎯 Was this AI classification correct?
+                  </strong>
+                  {issue.is_ai_correct !== null && issue.is_ai_correct !== undefined && (
+                    <div style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '6px',
+                      background: issue.is_ai_correct ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: issue.is_ai_correct ? 'var(--success)' : 'var(--danger)',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                    }}>
+                      {issue.is_ai_correct ? '✅ Marked as Correct' : '❌ Marked as Incorrect'}
+                      <span style={{ fontWeight: 400, marginLeft: '0.5rem', opacity: 0.7 }}>— click below to change</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                      className={`btn btn-sm ${issue.is_ai_correct === true ? 'btn-success' : 'btn-secondary'}`}
+                      onClick={async () => {
+                        try {
+                          const res = await adminAPI.aiFeedback(id, true);
+                          setIssue(res.data);
+                          setMsg('AI marked as Correct. Analytics updated.');
+                        } catch (err) {
+                          setMsg(err.response?.data?.detail || 'Failed to save feedback');
+                        }
+                      }}
+                    >
+                      👍 AI Was Correct
+                    </button>
+                    <button
+                      className={`btn btn-sm ${issue.is_ai_correct === false ? 'btn-danger' : 'btn-secondary'}`}
+                      onClick={async () => {
+                        try {
+                          const res = await adminAPI.aiFeedback(id, false);
+                          setIssue(res.data);
+                          setMsg('AI marked as Incorrect. Analytics updated.');
+                        } catch (err) {
+                          setMsg(err.response?.data?.detail || 'Failed to save feedback');
+                        }
+                      }}
+                    >
+                      👎 AI Was Wrong
+                    </button>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                    Your feedback updates the AI Accuracy metric in the Analytics Dashboard.
+                  </p>
                 </div>
 
                 {latestPrediction.confidence < 0.6 && (

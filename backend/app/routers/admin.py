@@ -18,7 +18,7 @@ from app.schemas.user import UserOut
 from app.schemas.issue import (
     AdminOverride, IssueDetailOut, IssueListOut,
     DepartmentOut, OfficerLabelOut, StatusHistoryOut, AssignmentHistoryOut, MediaOut,
-    AssignOfficerRequest, ResolveIssueRequest,
+    AssignOfficerRequest, ResolveIssueRequest, AiFeedbackRequest,
 )
 from app.middleware.auth import require_admin
 from app.services.upload_service import upload_image
@@ -343,6 +343,28 @@ async def resolve_issue(
     await db.flush()
 
     result = await db.execute(query)
+    issue = result.scalar_one_or_none()
+    return IssueDetailOut.model_validate(issue)
+
+
+@router.post("/issues/{issue_id}/ai-feedback", response_model=IssueDetailOut)
+async def mark_ai_feedback(
+    issue_id: str,
+    data: AiFeedbackRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: mark whether AI classification was correct or incorrect for an issue."""
+    result = await db.execute(_full_issue_query(issue_id))
+    issue = result.scalar_one_or_none()
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    issue.is_ai_correct = data.is_correct
+    issue.updated_at = datetime.utcnow()
+    await db.flush()
+
+    result = await db.execute(_full_issue_query(issue_id))
     issue = result.scalar_one_or_none()
     return IssueDetailOut.model_validate(issue)
 

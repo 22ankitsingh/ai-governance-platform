@@ -63,6 +63,7 @@ export const adminAPI = {
   updateIssue: (id, data) => api.put(`/admin/issues/${id}`, data),
   assignOfficer: (id, data) => api.post(`/admin/issues/${id}/assign`, data),
   resolveIssue: (id, data) => api.post(`/admin/issues/${id}/resolve`, data),
+  aiFeedback: (id, isCorrect) => api.post(`/admin/issues/${id}/ai-feedback`, { is_correct: isCorrect }),
   uploadAfterImage: (id, formData) => api.post(`/admin/issues/${id}/after-image`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   listDepartments: () => api.get('/admin/departments'),
   listOfficers: (params) => api.get('/admin/officers', { params }),
