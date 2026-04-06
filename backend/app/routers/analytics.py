@@ -51,13 +51,15 @@ async def get_overview(
     )
     critical_count = critical.scalar() or 0
 
+    # EXTRACT(EPOCH ...) gives seconds; divide by 3600 for hours
+    from sqlalchemy import text, cast, Numeric
     avg_time_result = await db.execute(
         select(func.avg(
-            func.julianday(Issue.closed_at) - func.julianday(Issue.created_at)
+            func.extract('epoch', Issue.closed_at - Issue.created_at) / 3600.0
         )).where(Issue.closed_at.isnot(None)).where(Issue.is_deleted == False)
     )
-    avg_days = avg_time_result.scalar()
-    avg_hours = round(avg_days * 24, 1) if avg_days else None
+    avg_hours_raw = avg_time_result.scalar()
+    avg_hours = round(float(avg_hours_raw), 1) if avg_hours_raw else None
 
     resolution_rate = round((resolved_count / total_count) * 100, 1) if total_count > 0 else 0
     reopen_rate = round((reopened_count / total_count) * 100, 1) if total_count > 0 else 0
@@ -258,13 +260,13 @@ async def issues_timeline(
     since = datetime.utcnow() - timedelta(days=days)
     query = (
         select(
-            func.date(Issue.created_at).label("day"),
+            func.date_trunc('day', Issue.created_at).label("day"),
             func.count(Issue.id).label("count"),
         )
         .where((Issue.created_at >= since) & (Issue.is_deleted == False))
-        .group_by(func.date(Issue.created_at))
-        .order_by(func.date(Issue.created_at))
+        .group_by(func.date_trunc('day', Issue.created_at))
+        .order_by(func.date_trunc('day', Issue.created_at))
     )
     result = await db.execute(query)
     rows = result.all()
-    return [{"date": str(row[0]) if row[0] else None, "count": row[1]} for row in rows]
+    return [{"date": str(row[0])[:10] if row[0] else None, "count": row[1]} for row in rows]

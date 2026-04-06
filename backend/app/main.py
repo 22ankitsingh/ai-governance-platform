@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,13 +9,18 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import init_db, async_session_factory
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    await init_db()
+    # ── Startup ──────────────────────────────────────────────────────────────
+    db_url_display = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else settings.DATABASE_URL
+    logger.info(f"Connected to PostgreSQL (NeonDB): {db_url_display}")
 
-    # Import models to register them
+    await init_db()  # creates tables, logs 'Database schema initialized'
+
+    # Import models to register them with SQLAlchemy metadata
     from app.models import (
         User, Department, IssueType, OfficerLabel, Issue,
         IssueMedia, AIPrediction, VerificationVote, Notification,
@@ -25,9 +31,11 @@ async def lifespan(app: FastAPI):
     from app.seed import seed_database
     async with async_session_factory() as session:
         await seed_database(session)
+    logger.info("Seeding completed")
 
     yield
-    # Shutdown — nothing to clean up
+    # ── Shutdown ─────────────────────────────────────────────────────────────
+    logger.info("Application shutting down")
 
 
 app = FastAPI(

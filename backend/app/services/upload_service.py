@@ -35,6 +35,7 @@ async def _upload_cloudinary(file: UploadFile, folder: str) -> str:
             api_secret=settings.CLOUDINARY_API_SECRET,
         )
 
+        logger.info("Uploading to Cloudinary")
         contents = await file.read()
         result = cloudinary.uploader.upload(
             contents,
@@ -42,10 +43,11 @@ async def _upload_cloudinary(file: UploadFile, folder: str) -> str:
             resource_type="image",
         )
         url = result["secure_url"]
-        logger.info(f"Cloudinary upload success: {url}")
+        logger.info("Cloudinary upload success")
         return url
     except Exception as e:
-        logger.warning(f"Cloudinary upload failed: {e}. Falling back to local.")
+        logger.error(f"Cloudinary upload failed: {e}")
+        logger.warning("Falling back to local storage.")
         await file.seek(0)
         return await _upload_local(file, folder)
 
