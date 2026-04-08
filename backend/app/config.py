@@ -16,9 +16,16 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: Optional[str] = None
     CLOUDINARY_API_SECRET: Optional[str] = None
 
-    # SendGrid
+    # SendGrid (legacy — kept for backward compat)
     SENDGRID_API_KEY: Optional[str] = None
     SENDGRID_FROM_EMAIL: str = "noreply@governance.local"
+
+    # SMTP — used for resolution email notifications
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None  # Falls back to SMTP_USER if not set
 
     # Google Gemini
     GEMINI_API_KEY: Optional[str] = None
@@ -36,6 +43,11 @@ class Settings(BaseSettings):
     @property
     def sendgrid_configured(self) -> bool:
         return bool(self.SENDGRID_API_KEY)
+
+    @property
+    def smtp_configured(self) -> bool:
+        """True only when all mandatory SMTP fields are present."""
+        return bool(self.SMTP_HOST and self.SMTP_USER and self.SMTP_PASSWORD)
 
     @property
     def gemini_configured(self) -> bool:

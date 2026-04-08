@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy import select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -23,6 +23,7 @@ from app.schemas.issue import (
 from app.middleware.auth import require_admin
 from app.services.upload_service import upload_image
 from app.services.notification_service import create_notification
+from app.services.email_service import send_resolution_email_sync
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -305,6 +306,7 @@ async def assign_officer(
 async def resolve_issue(
     issue_id: str,
     data: ResolveIssueRequest,
+    background_tasks: BackgroundTasks,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -342,8 +344,23 @@ async def resolve_issue(
 
     await db.flush()
 
+    # --- Reload full issue (includes reporter relation with email) ---
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
+
+    # --- Dispatch SMTP email in background (non-blocking) ---
+    if issue and issue.reporter:
+        background_tasks.add_task(
+            send_resolution_email_sync,
+            to_email=issue.reporter.email,
+            citizen_name=issue.reporter.full_name,
+            issue_title=issue.title,
+            issue_description=issue.description or "",
+            issue_id=str(issue.id),
+            officer_name=issue.officer_name,
+            resolution_notes=issue.resolution_notes,
+        )
+
     return IssueDetailOut.model_validate(issue)
 
 
