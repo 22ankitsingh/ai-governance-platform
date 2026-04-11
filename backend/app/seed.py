@@ -359,7 +359,7 @@ async def seed_database(db: AsyncSession):
     # ── Welcome notification ──────────────────────────────────────────────────
     db.add(Notification(
         user_id=citizen.id,
-        title="Welcome to Governance Platform",
+        title="Welcome to PrajaGov",
         message="Thank you for registering. You can now report civic issues using our structured issue type system.",
         notification_type="info",
     ))

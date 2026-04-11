@@ -1,4 +1,4 @@
-# AI-Powered Civic Governance Platform — Complete Technical Summary
+# PrajaGov — Complete Technical Summary
 
 > **Purpose**: This document is a full technical reference for the platform. It is written so that any AI or developer can fully understand the system without any prior context.
 

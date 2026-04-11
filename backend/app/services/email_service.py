@@ -69,7 +69,7 @@ def _build_resolution_email_html(
               <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;
                           letter-spacing:-0.5px;">Issue Resolved</h1>
               <p style="margin:8px 0 0;color:rgba(255,255,255,0.75);font-size:14px;">
-                AI-Powered Governance Platform
+                PrajaGov
               </p>
             </td>
           </tr>
@@ -146,7 +146,7 @@ def _build_resolution_email_html(
           <tr>
             <td style="background:#0f172a;padding:20px 40px;text-align:center;">
               <p style="margin:0;color:#475569;font-size:12px;">
-                © 2025 AI-Powered Governance Platform &nbsp;|&nbsp;
+                © 2026 PrajaGov &nbsp;|&nbsp;
                 <a href="{settings.FRONTEND_URL}" style="color:#6366f1;text-decoration:none;">
                   Visit Platform
                 </a>
@@ -213,7 +213,7 @@ def send_resolution_email_sync(
         f"Resolution Notes: {resolution_notes or 'N/A'}\n\n"
         f"View & Verify: {issue_url}\n\n"
         f"Please verify if the issue has been resolved satisfactorily.\n\n"
-        f"— AI-Powered Governance Platform"
+        f"— PrajaGov"
     )
     msg.attach(MIMEText(plain_text, "plain"))
     msg.attach(MIMEText(html_body, "html"))

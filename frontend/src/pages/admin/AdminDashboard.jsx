@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { analyticsAPI, adminAPI } from '../../api/client';
 import StatusBadge, { SeverityBadge, PriorityBadge, ConfidenceMeter } from '../../components/StatusBadge';
+import { BarChart3, Clock, CheckCircle2, RotateCcw, AlertTriangle, Timer, ArrowRight } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [overview, setOverview] = useState(null);
@@ -29,35 +30,35 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>Admin Dashboard</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Governance platform overview</p>
+      <div className="page-title-section">
+        <h1>Admin Dashboard</h1>
+        <p>PrajaGov platform overview and recent activity</p>
       </div>
 
       {overview && (
         <div className="stats-grid">
           <div className="stat-card">
-            <div className="stat-card-icon blue">📊</div>
+            <div className="stat-card-icon blue"><BarChart3 size={22} /></div>
             <div><div className="stat-card-value">{overview.total_issues}</div><div className="stat-card-label">Total Issues</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon yellow">⏳</div>
+            <div className="stat-card-icon yellow"><Clock size={22} /></div>
             <div><div className="stat-card-value">{overview.pending_issues}</div><div className="stat-card-label">Pending</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon green">✅</div>
+            <div className="stat-card-icon green"><CheckCircle2 size={22} /></div>
             <div><div className="stat-card-value">{overview.resolution_rate}%</div><div className="stat-card-label">Resolution Rate</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon red">🔄</div>
+            <div className="stat-card-icon red"><RotateCcw size={22} /></div>
             <div><div className="stat-card-value">{overview.reopened_issues}</div><div className="stat-card-label">Reopened</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon purple">🚨</div>
+            <div className="stat-card-icon purple"><AlertTriangle size={22} /></div>
             <div><div className="stat-card-value">{overview.critical_issues}</div><div className="stat-card-label">Critical</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon teal">⏱️</div>
+            <div className="stat-card-icon teal"><Timer size={22} /></div>
             <div><div className="stat-card-value">{overview.avg_resolution_hours || '—'}h</div><div className="stat-card-label">Avg Resolution Time</div></div>
           </div>
         </div>
@@ -66,10 +67,10 @@ export default function AdminDashboard() {
       <div className="card">
         <div className="card-header">
           <h3>Recent Issues (Priority Order)</h3>
-          <Link to="/admin/triage" className="btn btn-ghost btn-sm">View All →</Link>
+          <Link to="/admin/triage" className="btn btn-ghost btn-sm">View All <ArrowRight size={14} /></Link>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
-          <div className="table-wrapper" style={{ border: 'none' }}>
+          <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
             <table>
               <thead>
                 <tr>
@@ -96,13 +97,13 @@ export default function AdminDashboard() {
                       {issue.category || issue.issue_type?.name || '—'}
                       {!issue.issue_type_id && issue.category && (
                         <span style={{
-                          marginLeft: '0.35rem',
-                          fontSize: '0.65rem',
+                          marginLeft: '6px',
+                          fontSize: '0.6rem',
                           fontWeight: 700,
-                          padding: '0.1rem 0.35rem',
-                          borderRadius: '3px',
-                          background: 'rgba(51,129,255,0.15)',
-                          color: 'var(--primary-500)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(93,159,150,0.12)',
+                          color: 'var(--primary)',
                         }}>AI</span>
                       )}
                     </td>

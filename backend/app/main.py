@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="AI-Powered Governance Platform for civic issue reporting and management",
+    description="PrajaGov: AI-Powered Governance Platform for civic issue reporting and management",
     version="1.0.0",
     lifespan=lifespan,
 )

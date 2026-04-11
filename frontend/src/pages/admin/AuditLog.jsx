@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { adminAPI } from '../../api/client';
+import { ScrollText, FileText } from 'lucide-react';
 
 export default function AuditLog() {
   const [logs, setLogs] = useState([]);
@@ -17,47 +18,52 @@ export default function AuditLog() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>Audit Log</h1>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-        Complete history of all status changes across issues
-      </p>
+      <div className="page-title-section">
+        <h1>Audit Log</h1>
+        <p>Complete history of all status changes across issues</p>
+      </div>
 
       {logs.length === 0 ? (
-        <div className="empty-state"><div className="empty-state-icon">📝</div><h3>No audit entries</h3></div>
+        <div className="empty-state">
+          <div className="empty-state-icon"><ScrollText size={28} /></div>
+          <h3>No audit entries</h3>
+        </div>
       ) : (
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Issue ID</th>
-                <th>From Status</th>
-                <th>To Status</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map(log => (
-                <tr key={log.id}>
-                  <td style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{formatDate(log.created_at)}</td>
-                  <td style={{ fontSize: '0.78rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>
-                    {log.issue_id?.slice(0, 8)}...
-                  </td>
-                  <td>
-                    {log.from_status ? (
-                      <span className={`badge badge-${log.from_status}`}>{log.from_status.replace('_', ' ')}</span>
-                    ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>—</span>}
-                  </td>
-                  <td>
-                    <span className={`badge badge-${log.to_status}`}>{log.to_status.replace('_', ' ')}</span>
-                  </td>
-                  <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', maxWidth: 300 }}>
-                    {log.notes || '—'}
-                  </td>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Issue ID</th>
+                  <th>From Status</th>
+                  <th>To Status</th>
+                  <th>Notes</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {logs.map(log => (
+                  <tr key={log.id}>
+                    <td style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{formatDate(log.created_at)}</td>
+                    <td style={{ fontSize: '0.78rem', fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+                      {log.issue_id?.slice(0, 8)}...
+                    </td>
+                    <td>
+                      {log.from_status ? (
+                        <span className={`badge badge-${log.from_status}`}>{log.from_status.replace('_', ' ')}</span>
+                      ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>—</span>}
+                    </td>
+                    <td>
+                      <span className={`badge badge-${log.to_status}`}>{log.to_status.replace('_', ' ')}</span>
+                    </td>
+                    <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', maxWidth: 300 }}>
+                      {log.notes || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

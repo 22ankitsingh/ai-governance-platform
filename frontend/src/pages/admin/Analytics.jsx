@@ -4,10 +4,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell,
   ResponsiveContainer, Legend,
 } from 'recharts';
+import { BarChart3, CheckCircle2, RotateCcw, Brain, RefreshCw, Maximize2, X, TrendingUp } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const COLORS = ['#3381ff', '#07c4ae', '#f59e0b', '#ef4444', '#9333ea', '#10b981', '#f97316', '#64748b', '#ec4899', '#0ea5e9'];
+const COLORS = ['#5D9F96', '#EC9B05', '#FCB404', '#95E913', '#9333ea', '#12B76A', '#F97316', '#667085', '#FCC5F8', '#2E90FA'];
 
 const DEPT_ABBR = {
   'Municipal Administration & Urban Development': 'MAUD',
@@ -22,7 +23,7 @@ const DEPT_ABBR = {
 
 const getAbbr = (name) => DEPT_ABBR[name] || (name.length > 10 ? name.slice(0, 8) + '…' : name);
 
-const SEVERITY_COLORS = { low: '#22c55e', medium: '#f59e0b', high: '#f97316', critical: '#ef4444' };
+const SEVERITY_COLORS = { low: '#12B76A', medium: '#F79009', high: '#F97316', critical: '#F04438' };
 
 // ─── Custom Tooltip ───────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ const CustomDeptTooltip = ({ active, payload }) => {
         boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
       }}>
         <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '0.2rem' }}>{payload[0].payload.department}</div>
-        <div style={{ color: 'var(--primary-500)', fontWeight: 600 }}>{payload[0].value} issues</div>
+        <div style={{ color: 'var(--primary)', fontWeight: 600 }}>{payload[0].value} issues</div>
       </div>
     );
   }
@@ -110,7 +111,7 @@ function ChartModal({ title, onClose, children }) {
           borderBottom: '1px solid var(--border-light)',
           background: 'var(--bg-card)',
         }}>
-          <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>{title}</h2>
+          <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>{title}</h2>
           <button
             onClick={onClose}
             style={{
@@ -124,7 +125,7 @@ function ChartModal({ title, onClose, children }) {
             onMouseOver={e => e.currentTarget.style.background = 'var(--border-light)'}
             onMouseOut={e => e.currentTarget.style.background = 'var(--bg-hover)'}
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
         {/* Modal Body */}
@@ -151,7 +152,7 @@ function ChartCard({ title, onMaximize, children, badge }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <h3 style={{ margin: 0 }}>{title}</h3>
           {badge && (
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'var(--primary-50)', color: 'var(--primary-600)' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'var(--primary-50)', color: 'var(--primary)' }}>
               {badge}
             </span>
           )}
@@ -170,7 +171,7 @@ function ChartCard({ title, onMaximize, children, badge }) {
             opacity: hovered ? 1 : 0.4,
           }}
         >
-          ⤢
+          <Maximize2 size={14} />
         </button>
       </div>
       <div className="card-body">{children}</div>
@@ -261,7 +262,7 @@ export default function Analytics() {
           />
           <YAxis fontSize={12} />
           <Tooltip content={<CustomDeptTooltip />} />
-          <Bar dataKey="count" fill="var(--primary-500)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     );
@@ -305,7 +306,7 @@ export default function Analytics() {
           <XAxis type="number" fontSize={12} />
           <YAxis dataKey="status" type="category" fontSize={11} width={100} />
           <Tooltip />
-          <Bar dataKey="count" fill="var(--accent-500)" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="count" fill="var(--accent)" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     ) : <div className="empty-state"><p>No data</p></div>
@@ -345,14 +346,13 @@ export default function Analytics() {
       {/* Inject animations */}
       <style>{STYLES}</style>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Analytics Dashboard</h1>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={fetchData}
-          title="Refresh data"
-        >
-          ↺ Refresh
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div className="page-title-section" style={{ marginBottom: 0 }}>
+          <h1>Analytics Dashboard</h1>
+          <p>Platform performance and AI insights</p>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={fetchData} title="Refresh data">
+          <RefreshCw size={14} /> Refresh
         </button>
       </div>
 
@@ -360,19 +360,19 @@ export default function Analytics() {
       {data.overview && (
         <div className="stats-grid" style={{ marginBottom: '2rem' }}>
           <div className="stat-card">
-            <div className="stat-card-icon blue">📊</div>
+            <div className="stat-card-icon blue"><BarChart3 size={22} /></div>
             <div><div className="stat-card-value">{data.overview.total_issues}</div><div className="stat-card-label">Total Issues</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon green">✅</div>
+            <div className="stat-card-icon green"><CheckCircle2 size={22} /></div>
             <div><div className="stat-card-value">{data.overview.resolution_rate}%</div><div className="stat-card-label">Resolution Rate</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon red">🔄</div>
+            <div className="stat-card-icon red"><RotateCcw size={22} /></div>
             <div><div className="stat-card-value">{data.overview.reopen_rate}%</div><div className="stat-card-label">Reopen Rate</div></div>
           </div>
           <div className="stat-card">
-            <div className="stat-card-icon teal">🤖</div>
+            <div className="stat-card-icon teal"><Brain size={22} /></div>
             <div>
               <div className="stat-card-value">{hasReviews ? `${ai.accuracy_rate}%` : '—'}</div>
               <div className="stat-card-label">AI Accuracy {!hasReviews && <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>(pending review)</span>}</div>
@@ -382,7 +382,7 @@ export default function Analytics() {
       )}
 
       {/* ── Charts Grid ─────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+      <div className="grid-2col" style={{ marginBottom: '1.5rem' }}>
 
         {/* Issues by Department */}
         <ChartCard title="Issues by Department" badge="BAR" onMaximize={() => openModal('dept')}>
@@ -413,7 +413,7 @@ export default function Analytics() {
       {data.aiAccuracy && (
         <div className="card">
           <div className="card-header">
-            <h3>🤖 AI Prediction Performance</h3>
+            <h3><Brain size={16} /> AI Prediction Performance</h3>
             {!hasReviews && (
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                 No admin feedback yet — go to an issue's AI tab to review
@@ -460,13 +460,13 @@ export default function Analytics() {
                   value={ai.correct_predictions}
                   max={ai.total_reviewed}
                   color="var(--success)"
-                  label={`✅ Correct: ${ai.correct_predictions}`}
+                  label={`Correct: ${ai.correct_predictions}`}
                 />
                 <AccuracyBar
                   value={ai.incorrect_predictions}
                   max={ai.total_reviewed}
                   color="var(--danger)"
-                  label={`❌ Incorrect: ${ai.incorrect_predictions}`}
+                  label={`Incorrect: ${ai.incorrect_predictions}`}
                 />
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                   Based on {ai.total_reviewed} admin-reviewed issues out of {ai.total_predictions} total predictions.

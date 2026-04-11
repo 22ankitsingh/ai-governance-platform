@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { Upload, X, Image } from 'lucide-react';
 
 export default function ImageUpload({ onFilesChange, maxFiles = 5 }) {
   const [previews, setPreviews] = useState([]);
@@ -44,11 +45,15 @@ export default function ImageUpload({ onFilesChange, maxFiles = 5 }) {
           style={{ display: 'none' }}
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📷</div>
-        <p style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Click or drag images here</p>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          Upload up to {maxFiles} images • JPG, PNG, WebP
-        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--primary-50)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Upload size={24} />
+          </div>
+          <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0' }}>Click or drag images here</p>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+            Upload up to {maxFiles} images · JPG, PNG, WebP
+          </p>
+        </div>
       </div>
 
       {previews.length > 0 && (
@@ -56,7 +61,9 @@ export default function ImageUpload({ onFilesChange, maxFiles = 5 }) {
           {previews.map((p, i) => (
             <div key={i} className="upload-preview-item">
               <img src={p.url} alt={p.name} />
-              <button className="upload-preview-remove" onClick={(e) => { e.stopPropagation(); removeFile(i); }}>✕</button>
+              <button className="upload-preview-remove" onClick={(e) => { e.stopPropagation(); removeFile(i); }}>
+                <X size={12} />
+              </button>
             </div>
           ))}
         </div>

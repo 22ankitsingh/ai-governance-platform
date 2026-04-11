@@ -245,6 +245,7 @@ async def list_issues(
     issue_type_id: Optional[str] = Query(None),
     department_id: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -269,6 +270,8 @@ async def list_issues(
         query = query.where(Issue.department_id == department_id)
     if severity:
         query = query.where(Issue.severity == severity)
+    if search:
+        query = query.where(Issue.title.ilike(f"%{search}%"))
 
     query = query.order_by(
         case((Issue.status == "closed", 1), else_=0).asc(),

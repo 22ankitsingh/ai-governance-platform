@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
 
     # App
-    APP_NAME: str = "AI-Powered Governance Platform"
+    APP_NAME: str = "PrajaGov"
     FRONTEND_URL: str = "http://localhost:5173"
     UPLOAD_DIR: str = "uploads"
     VERIFICATION_APPROVAL_THRESHOLD: int = 3

@@ -53,7 +53,7 @@ async def _send_email_notification(user_id: UUID, subject: str, body: str, db: A
         message = Mail(
             from_email=settings.SENDGRID_FROM_EMAIL,
             to_emails=user.email,
-            subject=f"[Governance Platform] {subject}",
+            subject=f"[PrajaGov] {subject}",
             html_content=f"<p>{body}</p>",
         )
         sg = SendGridAPIClient(settings.SENDGRID_API_KEY)

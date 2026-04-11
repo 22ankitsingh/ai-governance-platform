@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Shield, Mail, Lock } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -27,36 +28,48 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div style={{ textAlign: 'center', marginBottom: '0.5rem', fontSize: '2rem' }}>🏛️</div>
+        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), var(--primary-light))', color: 'white', marginBottom: '16px' }}>
+            <Shield size={24} />
+          </div>
+        </div>
         <h1>Welcome Back</h1>
-        <p className="subtitle">Sign in to the Governance Platform</p>
+        <p className="subtitle">Sign in to the PrajaGov platform</p>
 
         {error && <div className="alert alert-error">{error}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">Email</label>
-            <input
-              id="login-email"
-              type="email"
-              className="form-input"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                id="login-email"
+                type="email"
+                className="form-input"
+                style={{ paddingLeft: '36px' }}
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">Password</label>
-            <input
-              id="login-password"
-              type="password"
-              className="form-input"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                id="login-password"
+                type="password"
+                className="form-input"
+                style={{ paddingLeft: '36px' }}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
           </div>
           <button id="login-submit" type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }} disabled={loading}>
             {loading ? 'Signing in...' : 'Sign In'}
@@ -67,7 +80,7 @@ export default function Login() {
           Don't have an account? <Link to="/register">Register here</Link>
         </div>
 
-        <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--gray-50)', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+        <div style={{ marginTop: '24px', padding: '12px 16px', background: 'var(--gray-50)', borderRadius: 'var(--radius-lg)', fontSize: '0.78rem', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}>
           <strong>Demo accounts:</strong><br />
           Admin: admin@gov.in / admin123<br />
           Citizen: citizen@example.com / citizen123
