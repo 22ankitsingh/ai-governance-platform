@@ -44,7 +44,8 @@ class AiFeedbackRequest(BaseModel):
 
 
 class AssignOfficerRequest(BaseModel):
-    officer_name: str
+    officer_name: Optional[str] = None
+    officer_id: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -147,6 +148,7 @@ class IssueTypeOut(BaseModel):
     id: str
     name: str
     department_id: Optional[str] = None
+    expected_resolution_hours: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -155,6 +157,17 @@ class IssueTypeOut(BaseModel):
 class OfficerLabelOut(BaseModel):
     id: str
     name: str
+    department_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OfficerBriefOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    designation: Optional[str] = None
     department_id: Optional[str] = None
 
     class Config:
@@ -187,6 +200,8 @@ class IssueOut(BaseModel):
     department_id: Optional[str] = None
     officer_label_id: Optional[str] = None
     officer_name: Optional[str] = None
+    officer_id: Optional[str] = None
+    assigned_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     resolved_at: Optional[datetime] = None
@@ -208,6 +223,7 @@ class IssueDetailOut(IssueOut):
     department: Optional[DepartmentOut] = None
     issue_type: Optional[IssueTypeOut] = None
     officer_label: Optional[OfficerLabelOut] = None
+    officer: Optional[OfficerBriefOut] = None
     media: List[MediaOut] = []
     ai_predictions: List[AIPredictionOut] = []
     verification_votes: List[VerificationVoteOut] = []

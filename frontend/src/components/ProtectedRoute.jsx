@@ -13,7 +13,12 @@ export function ProtectedRoute({ children, role }) {
   }
 
   if (role && user?.role !== role) {
-    return <Navigate to={user?.role === 'admin' ? '/admin' : '/dashboard'} replace />;
+    const redirectMap = {
+      admin: '/admin',
+      officer: '/officer',
+      citizen: '/dashboard',
+    };
+    return <Navigate to={redirectMap[user?.role] || '/dashboard'} replace />;
   }
 
   return children;

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Query
-from sqlalchemy import select, case
+from sqlalchemy import select, case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import Optional, List
@@ -12,6 +12,7 @@ from app.models.issue_type import IssueType
 from app.models.issue_media import IssueMedia
 from app.models.department import Department
 from app.models.officer_label import OfficerLabel
+from app.models.officer import Officer
 from app.models.status_history import StatusHistory
 from app.models.assignment_history import AssignmentHistory
 from app.schemas.user import UserOut
@@ -20,10 +21,12 @@ from app.schemas.issue import (
     DepartmentOut, OfficerLabelOut, StatusHistoryOut, AssignmentHistoryOut, MediaOut,
     AssignOfficerRequest, ResolveIssueRequest, AiFeedbackRequest,
 )
-from app.middleware.auth import require_admin
+from app.schemas.officer import OfficerCreate, OfficerOut, OfficerListOut
+from app.middleware.auth import require_admin, hash_password
 from app.services.upload_service import upload_image
 from app.services.notification_service import create_notification
-from app.services.email_service import send_resolution_email_sync
+from app.services.email_service import send_resolution_email_sync, send_assignment_email_sync
+from app.services.assignment_service import release_officer, check_negative_ticket
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -47,6 +50,7 @@ def _full_issue_query(issue_id: str):
         selectinload(Issue.department),
         selectinload(Issue.issue_type),
         selectinload(Issue.officer_label),
+        selectinload(Issue.officer),
         selectinload(Issue.media),
         selectinload(Issue.ai_predictions),
         selectinload(Issue.verification_votes),
@@ -253,10 +257,11 @@ async def admin_update_issue(
 async def assign_officer(
     issue_id: str,
     data: AssignOfficerRequest,
+    background_tasks: BackgroundTasks,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin: assign an officer to an issue. Only when status is not_assigned or reopened."""
+    """Admin: assign an officer to an issue. Supports real officer_id or legacy officer_name."""
     query = _full_issue_query(issue_id)
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
@@ -270,32 +275,66 @@ async def assign_officer(
         )
 
     old_status = issue.status
-    issue.officer_name = data.officer_name
+    assigned_officer = None
+    officer_display_name = data.officer_name or "Unknown"
+
+    # Real officer assignment (preferred)
+    if data.officer_id:
+        result = await db.execute(select(Officer).where(Officer.id == data.officer_id))
+        assigned_officer = result.scalar_one_or_none()
+        if not assigned_officer:
+            raise HTTPException(status_code=400, detail="Officer not found")
+        if not assigned_officer.is_available:
+            raise HTTPException(status_code=400, detail="Officer is currently unavailable (already assigned)")
+        if assigned_officer.is_on_leave:
+            raise HTTPException(status_code=400, detail="Officer is currently on leave")
+
+        issue.officer_id = assigned_officer.id
+        issue.officer_name = assigned_officer.name
+        issue.assigned_at = datetime.utcnow()
+        assigned_officer.is_available = False
+        officer_display_name = assigned_officer.name
+    else:
+        # Legacy name-only assignment
+        issue.officer_name = data.officer_name
+
     issue.status = "in_progress"
     issue.updated_at = datetime.utcnow()
 
     db.add(StatusHistory(
         issue_id=issue.id, from_status=old_status, to_status="in_progress",
         changed_by=admin.id,
-        notes=data.notes or f"Officer assigned: {data.officer_name}",
+        notes=data.notes or f"Officer assigned: {officer_display_name}",
     ))
 
     db.add(AssignmentHistory(
         issue_id=issue.id, assigned_by=admin.id,
         department_id=issue.department_id,
-        officer_name=data.officer_name,
-        notes=data.notes or f"Officer assigned: {data.officer_name}",
+        officer_name=officer_display_name,
+        notes=data.notes or f"Officer assigned by admin: {officer_display_name}",
     ))
 
     await create_notification(
         db, issue.reporter_id,
         title="Officer Assigned to Your Issue",
-        message=f'Officer "{data.officer_name}" has been assigned to your issue "{issue.title}". Status is now In Progress.',
+        message=f'Officer "{officer_display_name}" has been assigned to your issue "{issue.title}". Status is now In Progress.',
         notification_type="status_change",
         reference_id=issue.id,
     )
 
     await db.flush()
+
+    if assigned_officer:
+        background_tasks.add_task(
+            send_assignment_email_sync,
+            to_email=assigned_officer.email,
+            officer_name=assigned_officer.name,
+            issue_title=issue.title,
+            issue_description=issue.description or "",
+            issue_id=str(issue.id),
+            issue_location=issue.address or issue.context or "",
+            assigned_time=issue.assigned_at.strftime("%Y-%m-%d %H:%M:%S") if issue.assigned_at else "",
+        )
 
     result = await db.execute(query)
     issue = result.scalar_one_or_none()
@@ -333,6 +372,14 @@ async def resolve_issue(
         changed_by=admin.id,
         notes=data.notes or f"Issue resolved. Notes: {data.resolution_notes}",
     ))
+
+    # Release assigned officer and check for negative ticket
+    if issue.officer_id:
+        officer_result = await db.execute(select(Officer).where(Officer.id == issue.officer_id))
+        assigned_officer = officer_result.scalar_one_or_none()
+        if assigned_officer:
+            await check_negative_ticket(issue, assigned_officer, db)
+            await release_officer(assigned_officer, db)
 
     await create_notification(
         db, issue.reporter_id,
@@ -475,3 +522,97 @@ async def delete_user(
 ):
     """Admin: delete a user (Disabled)."""
     raise HTTPException(status_code=403, detail="Admin is not permitted to delete users")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OFFICER MANAGEMENT
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/real-officers", response_model=List[OfficerListOut])
+async def list_real_officers(
+    department_id: Optional[str] = Query(None),
+    available_only: Optional[bool] = Query(None),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: list all registered officers with optional filters."""
+    query = select(Officer).options(selectinload(Officer.department))
+    if department_id:
+        query = query.where(Officer.department_id == department_id)
+    if available_only is True:
+        query = query.where(Officer.is_available == True, Officer.is_on_leave == False)
+    query = query.order_by(Officer.name)
+
+    result = await db.execute(query)
+    officers = result.scalars().all()
+
+    out = []
+    for o in officers:
+        item = OfficerListOut.model_validate(o)
+        if o.department:
+            item.department_name = o.department.name
+        out.append(item)
+    return out
+
+
+@router.post("/real-officers", response_model=OfficerOut, status_code=201)
+async def admin_create_officer(
+    data: OfficerCreate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: create a new officer account."""
+    result = await db.execute(select(Officer).where(Officer.email == data.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    if data.department_id:
+        dept_result = await db.execute(select(Department).where(Department.id == data.department_id))
+        if not dept_result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Invalid department_id")
+
+    officer = Officer(
+        name=data.name,
+        email=data.email,
+        hashed_password=hash_password(data.password),
+        mobile_number=data.mobile_number,
+        department_id=data.department_id,
+        designation=data.designation,
+    )
+    db.add(officer)
+    await db.flush()
+
+    result = await db.execute(
+        select(Officer).where(Officer.id == officer.id).options(selectinload(Officer.department))
+    )
+    officer = result.scalar_one()
+
+    out = OfficerOut.model_validate(officer)
+    if officer.department:
+        out.department_name = officer.department.name
+    return out
+
+
+@router.get("/officer-stats")
+async def admin_officer_stats(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: get aggregate officer stats."""
+    total = await db.execute(select(func.count(Officer.id)))
+    available = await db.execute(
+        select(func.count(Officer.id)).where(Officer.is_available == True, Officer.is_on_leave == False)
+    )
+    on_leave = await db.execute(
+        select(func.count(Officer.id)).where(Officer.is_on_leave == True)
+    )
+    busy = await db.execute(
+        select(func.count(Officer.id)).where(Officer.is_available == False, Officer.is_on_leave == False)
+    )
+
+    return {
+        "total_officers": total.scalar() or 0,
+        "available": available.scalar() or 0,
+        "on_leave": on_leave.scalar() or 0,
+        "busy": busy.scalar() or 0,
+    }

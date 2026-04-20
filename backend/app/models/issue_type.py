@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, String, DateTime, Boolean, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -16,6 +16,7 @@ class IssueType(Base):
     name = Column(String(200), nullable=False)          # e.g. "Garbage Accumulation"
     department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
     is_active = Column(Boolean, default=True)
+    expected_resolution_hours = Column(Float, nullable=True)  # hours allowed for resolution
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

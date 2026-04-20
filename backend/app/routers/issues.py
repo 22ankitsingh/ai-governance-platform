@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, BackgroundTasks
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,7 @@ from app.models.issue_media import IssueMedia
 from app.models.ai_prediction import AIPrediction
 from app.models.verification_vote import VerificationVote
 from app.models.status_history import StatusHistory
+from app.models.officer import Officer
 from app.schemas.issue import (
     IssueCreate, IssueOut, IssueListOut, IssueDetailOut,
     VerificationVoteCreate, MediaOut, VerificationVoteOut,
@@ -23,6 +24,8 @@ from app.services.ai_service import analyze_issue, infer_department
 from app.services.upload_service import upload_image
 from app.services.geo_service import reverse_geocode
 from app.services.notification_service import create_notification
+from app.services.email_service import send_assignment_email_sync
+from app.services.assignment_service import auto_assign_officer, update_officer_rating, release_officer, increment_negative_ticket
 
 router = APIRouter(prefix="/api/issues", tags=["Issues"])
 
@@ -39,6 +42,7 @@ def _full_citizen_query(issue_id: str):
             selectinload(Issue.department),
             selectinload(Issue.issue_type),
             selectinload(Issue.officer_label),
+            selectinload(Issue.officer),
             selectinload(Issue.media),
             selectinload(Issue.ai_predictions),
             selectinload(Issue.verification_votes),
@@ -76,6 +80,7 @@ async def _get_department_by_name(name: str, db: AsyncSession) -> Optional[Depar
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("", response_model=IssueOut, status_code=201)
 async def create_issue(
+    background_tasks: BackgroundTasks,
     title: str = Form(...),
     description: str = Form(...),
     latitude: Optional[float] = Form(None),
@@ -235,6 +240,24 @@ async def create_issue(
 
     await db.flush()
     await db.refresh(issue)
+
+    # ── Auto-assign officer ────────────────────────────────────────────────
+    assigned_officer = await auto_assign_officer(issue, db)
+    await db.flush()
+    await db.refresh(issue)
+
+    if assigned_officer:
+        background_tasks.add_task(
+            send_assignment_email_sync,
+            to_email=assigned_officer.email,
+            officer_name=assigned_officer.name,
+            issue_title=issue.title,
+            issue_description=issue.description or "",
+            issue_id=str(issue.id),
+            issue_location=issue.address or issue.context or "",
+            assigned_time=issue.assigned_at.strftime("%Y-%m-%d %H:%M:%S") if issue.assigned_at else "",
+        )
+
     return IssueOut.model_validate(issue)
 
 
@@ -321,6 +344,7 @@ async def get_issue(
 async def verify_issue(
     issue_id: str,
     data: VerificationVoteCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -362,17 +386,51 @@ async def verify_issue(
             changed_by=current_user.id,
             notes=f"Citizen verified and approved. Rating: {data.rating}/5" if data.rating else "Citizen verified and approved."
         ))
+
+        # Forward rating to assigned officer
+        if issue.officer_id and data.rating:
+            officer_result = await db.execute(select(Officer).where(Officer.id == issue.officer_id))
+            assigned_officer = officer_result.scalar_one_or_none()
+            if assigned_officer:
+                await update_officer_rating(assigned_officer, data.rating, db)
     else:
         issue.status = "reopened"
         issue.reopen_count += 1
         issue.priority = max(1, issue.priority - 1)
         issue.resolved_at = None
+
+        # Release officer and reset assignment
+        if issue.officer_id:
+            officer_result = await db.execute(select(Officer).where(Officer.id == issue.officer_id))
+            assigned_officer = officer_result.scalar_one_or_none()
+            if assigned_officer:
+                increment_negative_ticket(assigned_officer)
+                await update_officer_rating(assigned_officer, 1, db)
+                await release_officer(assigned_officer, db)
+
         issue.officer_name = None
+        issue.officer_id = None
+        issue.assigned_at = None
+
         db.add(StatusHistory(
             issue_id=issue.id, from_status=old_status, to_status="reopened",
             changed_by=current_user.id,
-            notes=f"Citizen rejected resolution. Reason: {data.rejection_reason or 'Not satisfied'}. Priority increased."
+            notes=f"Citizen rejected resolution. Reason: {data.rejection_reason or 'Not satisfied'}. Priority increased. Officer penalized."
         ))
+
+        await db.flush()
+        assigned_officer_new = await auto_assign_officer(issue, db)
+        if assigned_officer_new:
+            background_tasks.add_task(
+                send_assignment_email_sync,
+                to_email=assigned_officer_new.email,
+                officer_name=assigned_officer_new.name,
+                issue_title=issue.title,
+                issue_description=issue.description or "",
+                issue_id=str(issue.id),
+                issue_location=issue.address or issue.context or "",
+                assigned_time=issue.assigned_at.strftime("%Y-%m-%d %H:%M:%S") if issue.assigned_at else "",
+            )
 
     await db.flush()
 

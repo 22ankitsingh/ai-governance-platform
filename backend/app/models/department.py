@@ -22,3 +22,4 @@ class Department(Base):
     issues = relationship("Issue", back_populates="department")
     officer_labels = relationship("OfficerLabel", back_populates="department")
     issue_types = relationship("IssueType", back_populates="department")
+    officers = relationship("Officer", back_populates="department")

@@ -160,6 +160,9 @@ export default function IssueDetail() {
                   )}
                 </div>
                 <div style={{ fontSize: '0.82rem', marginBottom: '8px' }}><strong>Context:</strong> {issue.context || '—'}</div>
+                {issue.issue_type?.expected_resolution_hours && (
+                  <div style={{ fontSize: '0.82rem', marginBottom: '8px', color: 'var(--warning)', fontWeight: 600 }}><strong>Expected Resolution:</strong> {issue.issue_type.expected_resolution_hours} hours</div>
+                )}
                 <div style={{ fontSize: '0.82rem', marginBottom: '8px' }}><strong>Reopened:</strong> {issue.reopen_count} time(s)</div>
                 {issue.officer_name && (
                   <div style={{ fontSize: '0.82rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>

@@ -163,6 +163,56 @@ def _build_resolution_email_html(
 </html>"""
 
 
+def _build_assignment_email_html(
+    officer_name: str,
+    issue_title: str,
+    issue_description: str,
+    issue_id: str,
+    issue_location: str,
+    assigned_time: str,
+    dashboard_url: str,
+) -> str:
+    """Return HTML email body for issue assignment notification to officer."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden;max-width:600px;width:100%;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#eab308 0%,#ca8a04 100%); padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;">New Issue Assigned</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:36px 40px;">
+              <p style="margin:0 0 20px;color:#e2e8f0;font-size:16px;">Dear <strong>{officer_name}</strong>,</p>
+              <p style="margin:0 0 28px;color:#94a3b8;font-size:14px;">A new civic issue has been assigned to you.</p>
+
+              <div style="background:#0f172a;border-radius:12px;padding:24px;margin-bottom:24px;">
+                <h2 style="margin:0 0 16px;color:#f1f5f9;font-size:18px;">{issue_title}</h2>
+                <p style="margin:0 0 20px;color:#94a3b8;font-size:13px;">{issue_description}</p>
+                <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #1e293b;">
+                  <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px;width:160px;">Issue ID</td><td style="padding:8px 0;color:#e2e8f0;font-size:13px;">{issue_id}</td></tr>
+                  <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px;">Location</td><td style="padding:8px 0;color:#e2e8f0;font-size:13px;">{issue_location or 'Not specified'}</td></tr>
+                  <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px;">Assigned Time</td><td style="padding:8px 0;color:#e2e8f0;font-size:13px;">{assigned_time}</td></tr>
+                </table>
+              </div>
+
+              <div style="text-align:center;margin:32px 0;">
+                <a href="{dashboard_url}" style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:50px;font-weight:600;">Go to Dashboard →</a>
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
 # ---------------------------------------------------------------------------
 # Core send function (blocking — called inside a background task)
 # ---------------------------------------------------------------------------
@@ -240,3 +290,59 @@ def send_resolution_email_sync(
             exc,
             exc_info=True,
         )
+
+
+def send_assignment_email_sync(
+    to_email: str,
+    officer_name: str,
+    issue_title: str,
+    issue_description: str,
+    issue_id: str,
+    issue_location: str,
+    assigned_time: str,
+) -> None:
+    """Synchronous SMTP send for officer assignment, to be run in BackgroundTasks."""
+    if not settings.smtp_configured:
+        logger.warning(f"SMTP not configured — skipping assignment email for issue {issue_id}")
+        return
+
+    dashboard_url = f"{settings.FRONTEND_URL}/officer"
+    html_body = _build_assignment_email_html(
+        officer_name=officer_name,
+        issue_title=issue_title,
+        issue_description=issue_description,
+        issue_id=issue_id,
+        issue_location=issue_location,
+        assigned_time=assigned_time,
+        dashboard_url=dashboard_url,
+    )
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "New Issue Assigned: " + issue_title
+    msg["From"] = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
+    msg["To"] = to_email
+
+    plain_text = (
+        f"Dear {officer_name},\n\n"
+        f"A new issue '{issue_title}' has been assigned to you.\n"
+        f"Issue ID: {issue_id}\n"
+        f"Location: {issue_location or 'N/A'}\n"
+        f"Assigned At: {assigned_time}\n"
+        f"Description: {issue_description}\n\n"
+        f"Go to dashboard: {dashboard_url}\n\n"
+        f"— PrajaGov"
+    )
+    msg.attach(MIMEText(plain_text, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+            smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            smtp.sendmail(msg["From"], [to_email], msg.as_string())
+        logger.info(f"Assignment email sent to {to_email} for issue {issue_id}")
+    except Exception as exc:
+        logger.error(f"Assignment email failed for issue {issue_id} (recipient: {to_email}): {exc}")
+

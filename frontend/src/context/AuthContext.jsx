@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../api/client';
+import { authAPI, officerAPI } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -13,11 +13,14 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Verify token on mount
-    if (token) {
-      authAPI.me()
+    if (token && user) {
+      const role = user.role;
+      const verifyFn = role === 'officer' ? officerAPI.me() : authAPI.me();
+      verifyFn
         .then(res => {
-          setUser(res.data);
-          localStorage.setItem('user', JSON.stringify(res.data));
+          const userData = { ...res.data, role: res.data.role || role };
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
         })
         .catch(() => {
           logout();
@@ -28,8 +31,13 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const login = async (email, password) => {
-    const res = await authAPI.login({ email, password });
+  const login = async (email, password, role = 'citizen') => {
+    let res;
+    if (role === 'officer') {
+      res = await officerAPI.login({ email, password });
+    } else {
+      res = await authAPI.login({ email, password });
+    }
     const { access_token, user: userData } = res.data;
     setToken(access_token);
     setUser(userData);
@@ -38,8 +46,13 @@ export function AuthProvider({ children }) {
     return userData;
   };
 
-  const register = async (data) => {
-    const res = await authAPI.register(data);
+  const register = async (data, role = 'citizen') => {
+    let res;
+    if (role === 'officer') {
+      res = await officerAPI.register(data);
+    } else {
+      res = await authAPI.register(data);
+    }
     const { access_token, user: userData } = res.data;
     setToken(access_token);
     setUser(userData);
@@ -57,10 +70,14 @@ export function AuthProvider({ children }) {
 
   const isAdmin = user?.role === 'admin';
   const isCitizen = user?.role === 'citizen';
+  const isOfficer = user?.role === 'officer';
   const isAuthenticated = !!user && !!token;
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, isAdmin, isCitizen, isAuthenticated }}>
+    <AuthContext.Provider value={{
+      user, token, loading, login, register, logout,
+      isAdmin, isCitizen, isOfficer, isAuthenticated,
+    }}>
       {children}
     </AuthContext.Provider>
   );

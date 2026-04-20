@@ -69,6 +69,26 @@ export const adminAPI = {
   listOfficers: (params) => api.get('/admin/officers', { params }),
   getAuditLog: (params) => api.get('/admin/audit-log', { params }),
   listUsers: (params) => api.get('/admin/users', { params }),
+  // Real officer management
+  listRealOfficers: (params) => api.get('/admin/real-officers', { params }),
+  createOfficer: (data) => api.post('/admin/real-officers', data),
+  officerStats: () => api.get('/admin/officer-stats'),
+};
+
+// ===== Officer =====
+export const officerAPI = {
+  register: (data) => api.post('/officer/register', data),
+  login: (data) => api.post('/officer/login', data),
+  me: () => api.get('/officer/me'),
+  updateProfile: (data) => api.put('/officer/me', data),
+  toggleLeave: (data) => api.put('/officer/leave', data),
+  stats: () => api.get('/officer/stats'),
+  currentIssue: () => api.get('/officer/current-issue'),
+  previousIssues: (params) => api.get('/officer/previous-issues', { params }),
+  resolveIssue: (id, data) => api.post(`/officer/issues/${id}/resolve`, data),
+  uploadAfterImage: (id, formData) => api.post(`/officer/issues/${id}/after-image`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  aiFeedback: (id, isCorrect) => api.post(`/officer/issues/${id}/ai-feedback`, { is_correct: isCorrect }),
+  deleteAccount: () => api.delete('/officer/me'),
 };
 
 // ===== Analytics =====

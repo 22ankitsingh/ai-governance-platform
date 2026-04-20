@@ -2,20 +2,23 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { analyticsAPI, adminAPI } from '../../api/client';
 import StatusBadge, { SeverityBadge, PriorityBadge, ConfidenceMeter } from '../../components/StatusBadge';
-import { BarChart3, Clock, CheckCircle2, RotateCcw, AlertTriangle, Timer, ArrowRight } from 'lucide-react';
+import { BarChart3, Clock, CheckCircle2, RotateCcw, AlertTriangle, Timer, ArrowRight, Briefcase, Users } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [overview, setOverview] = useState(null);
   const [recentIssues, setRecentIssues] = useState([]);
+  const [officerStats, setOfficerStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       analyticsAPI.overview(),
       adminAPI.listIssues({ page_size: 5 }),
-    ]).then(([ovr, issues]) => {
+      adminAPI.officerStats(),
+    ]).then(([ovr, issues, oStats]) => {
       setOverview(ovr.data);
       setRecentIssues(issues.data);
+      setOfficerStats(oStats.data);
     }).catch(() => {})
     .finally(() => setLoading(false));
   }, []);
@@ -60,6 +63,27 @@ export default function AdminDashboard() {
           <div className="stat-card">
             <div className="stat-card-icon teal"><Timer size={22} /></div>
             <div><div className="stat-card-value">{overview.avg_resolution_hours || '—'}h</div><div className="stat-card-label">Avg Resolution Time</div></div>
+          </div>
+        </div>
+      )}
+
+      {/* Officer Stats */}
+      {officerStats && (
+        <div className="card" style={{ marginBottom: '20px', padding: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="stat-card-icon teal" style={{ width: '36px', height: '36px', borderRadius: '8px' }}><Briefcase size={18} /></div>
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>Officers</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{officerStats.total_officers} total</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '24px', fontSize: '0.82rem' }}>
+              <div><span style={{ fontWeight: 700, color: 'var(--success)' }}>{officerStats.available}</span> Available</div>
+              <div><span style={{ fontWeight: 700, color: 'var(--primary)' }}>{officerStats.busy}</span> Busy</div>
+              <div><span style={{ fontWeight: 700, color: 'var(--warning)' }}>{officerStats.on_leave}</span> On Leave</div>
+            </div>
+            <Link to="/admin/officers" className="btn btn-ghost btn-sm">Manage <ArrowRight size={14} /></Link>
           </div>
         </div>
       )}

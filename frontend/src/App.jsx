@@ -23,9 +23,16 @@ import IssueManage from './pages/admin/IssueManage';
 import Analytics from './pages/admin/Analytics';
 import AuditLog from './pages/admin/AuditLog';
 import UserManage from './pages/admin/UserManage';
+import OfficerManage from './pages/admin/OfficerManage';
+
+// Officer pages
+import OfficerDashboard from './pages/officer/OfficerDashboard';
+import CurrentIssue from './pages/officer/CurrentIssue';
+import IssueHistory from './pages/officer/IssueHistory';
+import OfficerProfile from './pages/officer/OfficerProfile';
 
 function AppRoutes() {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { isAuthenticated, isAdmin, isOfficer, loading } = useAuth();
 
   if (loading) {
     return (
@@ -35,15 +42,21 @@ function AppRoutes() {
     );
   }
 
+  const getRedirect = () => {
+    if (isAdmin) return '/admin';
+    if (isOfficer) return '/officer';
+    return '/dashboard';
+  };
+
   return (
     <Routes>
       {/* Public */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={
-        isAuthenticated ? <Navigate to={isAdmin ? '/admin' : '/dashboard'} /> : <Login />
+        isAuthenticated ? <Navigate to={getRedirect()} /> : <Login />
       } />
       <Route path="/register" element={
-        isAuthenticated ? <Navigate to="/dashboard" /> : <Register />
+        isAuthenticated ? <Navigate to={getRedirect()} /> : <Register />
       } />
 
       {/* Citizen routes */}
@@ -70,9 +83,22 @@ function AppRoutes() {
         <Route path="triage" element={<TriageQueue />} />
         <Route path="issues/:id" element={<IssueManage />} />
         <Route path="analytics" element={<Analytics />} />
+        <Route path="officers" element={<OfficerManage />} />
         <Route path="users" element={<UserManage />} />
         <Route path="audit-log" element={<AuditLog />} />
         <Route path="notifications" element={<Notifications />} />
+      </Route>
+
+      {/* Officer routes */}
+      <Route path="/officer" element={
+        <ProtectedRoute role="officer">
+          <DashboardLayout />
+        </ProtectedRoute>
+      }>
+        <Route index element={<OfficerDashboard />} />
+        <Route path="current-issue" element={<CurrentIssue />} />
+        <Route path="history" element={<IssueHistory />} />
+        <Route path="profile" element={<OfficerProfile />} />
       </Route>
 
       {/* Fallback */}

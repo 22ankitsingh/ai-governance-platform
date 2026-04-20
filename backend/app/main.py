@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 
     # Import models to register them with SQLAlchemy metadata
     from app.models import (
-        User, Department, IssueType, OfficerLabel, Issue,
+        User, Department, IssueType, OfficerLabel, Officer, Issue,
         IssueMedia, AIPrediction, VerificationVote, Notification,
         AssignmentHistory, StatusHistory,
     )
@@ -66,6 +66,7 @@ from app.routers.admin import router as admin_router
 from app.routers.analytics import router as analytics_router
 from app.routers.notifications import router as notifications_router
 from app.routers.reference import router as reference_router
+from app.routers.officer import router as officer_router
 
 app.include_router(auth_router)
 app.include_router(users_router)
@@ -74,6 +75,7 @@ app.include_router(admin_router)
 app.include_router(analytics_router)
 app.include_router(notifications_router)
 app.include_router(reference_router)
+app.include_router(officer_router)
 
 
 @app.get("/api/health")

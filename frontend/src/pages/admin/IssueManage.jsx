@@ -22,7 +22,8 @@ export default function IssueManage() {
   const [activeTab, setActiveTab] = useState('manage');
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
-  const [officerName, setOfficerName] = useState('');
+  const [selectedOfficerId, setSelectedOfficerId] = useState('');
+  const [availableOfficers, setAvailableOfficers] = useState([]);
   const [assigning, setAssigning] = useState(false);
   const [resolveNotes, setResolveNotes] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -40,6 +41,9 @@ export default function IssueManage() {
       if (i.department_id) {
         const group = catRes.data.find(g => g.department_id === i.department_id);
         setFilteredIssueTypes(group ? group.issue_types : []);
+        // Load available officers for this department
+        adminAPI.listRealOfficers({ department_id: i.department_id, available_only: true })
+          .then(r => setAvailableOfficers(r.data)).catch(() => {});
       }
       setUpdateForm({
         issue_type_id: i.issue_type_id || '', severity: i.severity, priority: i.priority,
@@ -63,10 +67,15 @@ export default function IssueManage() {
   };
 
   const handleAssignOfficer = async () => {
-    if (!officerName.trim()) return;
+    if (!selectedOfficerId) return;
     setAssigning(true); setMsg('');
-    try { const res = await adminAPI.assignOfficer(id, { officer_name: officerName.trim() }); setIssue(res.data); setOfficerName(''); setMsg(`Officer "${officerName.trim()}" assigned. Status → In Progress`); }
-    catch (err) { setMsg(err.response?.data?.detail || 'Assignment failed'); }
+    try {
+      const officer = availableOfficers.find(o => o.id === selectedOfficerId);
+      const res = await adminAPI.assignOfficer(id, { officer_id: selectedOfficerId, officer_name: officer?.name });
+      setIssue(res.data);
+      setSelectedOfficerId('');
+      setMsg(`Officer "${officer?.name || 'Unknown'}" assigned. Status → In Progress`);
+    } catch (err) { setMsg(err.response?.data?.detail || 'Assignment failed'); }
     finally { setAssigning(false); }
   };
 
@@ -120,6 +129,7 @@ export default function IssueManage() {
           {issue.officer_name && (
             <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <User size={14} /> Assigned Officer: <strong>{issue.officer_name}</strong>
+              {issue.officer?.designation && <span style={{ color: 'var(--text-muted)' }}>({issue.officer.designation})</span>}
             </p>
           )}
         </div>
@@ -164,13 +174,29 @@ export default function IssueManage() {
                 <div className="card-header"><h3><User size={16} /> Assign Officer</h3></div>
                 <div className="card-body">
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                    Enter the officer's name. Status will change to <strong>In Progress</strong>.
+                    Select an available officer from the department. Status will change to <strong>In Progress</strong>.
                   </p>
                   <div className="form-group" style={{ marginBottom: '12px' }}>
-                    <label className="form-label">Officer Name</label>
-                    <input className="form-input" value={officerName} onChange={e => setOfficerName(e.target.value)} placeholder="Enter officer name..." />
+                    <label className="form-label">Available Officers ({availableOfficers.length})</label>
+                    <select
+                      className="form-select"
+                      value={selectedOfficerId}
+                      onChange={e => setSelectedOfficerId(e.target.value)}
+                    >
+                      <option value="">— Select Officer —</option>
+                      {availableOfficers.map(o => (
+                        <option key={o.id} value={o.id}>
+                          {o.name} — {o.designation || 'Officer'} (★{o.avg_rating?.toFixed(1)} | {o.negative_tickets} neg)
+                        </option>
+                      ))}
+                    </select>
+                    {availableOfficers.length === 0 && (
+                      <div className="form-hint" style={{ color: 'var(--warning)' }}>
+                        No available officers in this department. Assign from a different department or wait.
+                      </div>
+                    )}
                   </div>
-                  <button className="btn btn-primary" onClick={handleAssignOfficer} disabled={assigning || !officerName.trim()}>
+                  <button className="btn btn-primary" onClick={handleAssignOfficer} disabled={assigning || !selectedOfficerId}>
                     <CheckCircle2 size={16} /> {assigning ? 'Assigning...' : 'Assign Officer'}
                   </button>
                 </div>

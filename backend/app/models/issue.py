@@ -33,6 +33,8 @@ class Issue(Base):
     # Officer assignment
     officer_label_id = Column(String(36), ForeignKey("officer_labels.id"), nullable=True)
     officer_name = Column(String(255), nullable=True)
+    officer_id = Column(String(36), ForeignKey("officers.id"), nullable=True)
+    assigned_at = Column(DateTime, nullable=True)
 
     # Severity & priority
     severity = Column(String(20), default="medium")
@@ -72,6 +74,7 @@ class Issue(Base):
     department = relationship("Department", back_populates="issues")
     issue_type = relationship("IssueType", back_populates="issues")
     officer_label = relationship("OfficerLabel")
+    officer = relationship("Officer", back_populates="assigned_issues", foreign_keys=[officer_id])
     media = relationship("IssueMedia", back_populates="issue", cascade="all, delete-orphan")
     ai_predictions = relationship("AIPrediction", back_populates="issue", cascade="all, delete-orphan")
     verification_votes = relationship("VerificationVote", back_populates="issue", cascade="all, delete-orphan")
