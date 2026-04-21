@@ -80,6 +80,7 @@ async def admin_list_issues(
     priority: Optional[int] = Query(None),
     min_confidence: Optional[float] = Query(None),
     max_confidence: Optional[float] = Query(None),
+    is_irrelevant: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -108,6 +109,8 @@ async def admin_list_issues(
         query = query.where(Issue.ai_confidence >= min_confidence)
     if max_confidence is not None:
         query = query.where(Issue.ai_confidence <= max_confidence)
+    if is_irrelevant is not None:
+        query = query.where(Issue.is_irrelevant == is_irrelevant)
     if search:
         query = query.where(Issue.title.ilike(f"%{search}%"))
 
@@ -191,6 +194,8 @@ async def admin_update_issue(
         issue.priority = data.priority
     if data.resolution_notes is not None:
         issue.resolution_notes = data.resolution_notes
+    if data.is_irrelevant is not None:
+        issue.is_irrelevant = data.is_irrelevant
 
     # Status change — only valid transitions
     if data.status is not None and data.status != old_status:

@@ -207,6 +207,7 @@ async def create_issue(
         ai_reasoning=ai_result.get("reasoning"),
         severity=ai_result.get("predicted_severity", "medium"),
         priority=ai_result.get("predicted_priority", 3),
+        is_irrelevant=ai_result.get("is_irrelevant", False)
     )
     db.add(issue)
     await db.flush()
@@ -241,22 +242,23 @@ async def create_issue(
     await db.flush()
     await db.refresh(issue)
 
-    # ── Auto-assign officer ────────────────────────────────────────────────
-    assigned_officer = await auto_assign_officer(issue, db)
-    await db.flush()
-    await db.refresh(issue)
+    # ── Auto-assign officer (Skip if Irrelevant) ───────────────────────────
+    if not issue.is_irrelevant:
+        assigned_officer = await auto_assign_officer(issue, db)
+        await db.flush()
+        await db.refresh(issue)
 
-    if assigned_officer:
-        background_tasks.add_task(
-            send_assignment_email_sync,
-            to_email=assigned_officer.email,
-            officer_name=assigned_officer.name,
-            issue_title=issue.title,
-            issue_description=issue.description or "",
-            issue_id=str(issue.id),
-            issue_location=issue.address or issue.context or "",
-            assigned_time=issue.assigned_at.strftime("%Y-%m-%d %H:%M:%S") if issue.assigned_at else "",
-        )
+        if assigned_officer:
+            background_tasks.add_task(
+                send_assignment_email_sync,
+                to_email=assigned_officer.email,
+                officer_name=assigned_officer.name,
+                issue_title=issue.title,
+                issue_description=issue.description or "",
+                issue_id=str(issue.id),
+                issue_location=issue.address or issue.context or "",
+                assigned_time=issue.assigned_at.strftime("%Y-%m-%d %H:%M:%S") if issue.assigned_at else "",
+            )
 
     return IssueOut.model_validate(issue)
 

@@ -46,6 +46,7 @@ class Issue(Base):
     # AI
     ai_confidence = Column(Float, nullable=True)
     ai_reasoning = Column(Text, nullable=True)
+    is_irrelevant = Column(Boolean, default=False)
     is_ai_correct = Column(Boolean, nullable=True)  # Admin feedback: True/False/None(not reviewed)
 
     # Resolution

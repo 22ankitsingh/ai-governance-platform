@@ -35,6 +35,7 @@ class AdminOverride(BaseModel):
     status: Optional[str] = None
     resolution_notes: Optional[str] = None
     notes: Optional[str] = None
+    is_irrelevant: Optional[bool] = None
     # Legacy — still accepted but ignored if issue_type_id provided
     category: Optional[str] = None
 
@@ -191,6 +192,7 @@ class IssueOut(BaseModel):
     status: str
     ai_confidence: Optional[float] = None
     ai_reasoning: Optional[str] = None
+    is_irrelevant: Optional[bool] = False
     is_ai_correct: Optional[bool] = None  # Admin feedback on AI accuracy
     resolution_notes: Optional[str] = None
     reopen_count: int

@@ -337,10 +337,10 @@ def _keyword_classify(
         "department": department,
         "predicted_severity": severity,
         "predicted_priority": priority,
-        "confidence": round(confidence, 2),
         "reasoning": reasoning,
         "model_version": "fallback-keyword-v2",
         "raw_response": None,
+        "is_irrelevant": False, # Basic fallback doesn't do deep intent check.
     }
 
 
@@ -377,18 +377,18 @@ Title: {title}
 Description: {description}{location_context}
 
 YOUR TASK:
-1. Generate a DYNAMIC, context-aware issue_type — do NOT restrict to any predefined list.
-   The issue_type should be:
-   - Concise (3-6 words)
-   - Human-readable and specific
-   - Descriptive of the actual problem
-   Examples of good issue_types:
-     "Transformer Explosion Risk"
-     "Illegal Construction on Drainage"
-     "Severe Urban Garbage Overflow"
-     "Hospital Emergency Denial"
-     "Contaminated Water Supply Pipe"
-     "Fallen Electric Pole on Road"
+1. Compare this complaint to the predefined issue_types typical for Indian civic governance.
+   - IF a strong match exists -> return a clear, standard predefined issue_type (e.g. "Garbage Accumulation", "Potholes / Road Damage").
+   - ELSE -> generate a NEW dynamic issue_type. It must be concise (3-6 words), meaningful, and descriptive.
+   
+2. DETECT IRRELEVANT / BOGUS COMPLAINTS:
+   - Identify completely unrelated content (spam, jokes, abuse, meaningless descriptions) or non-governance issues.
+   - If irrelevant: 
+       -> set `issue_type` to "Irrelevant Complaint" or "Invalid Submission"
+       -> set `severity` to "low"
+       -> set `priority` to 5
+       -> set `is_irrelevant` to true
+       -> set `confidence` to something low (e.g., 0.3)
 
 2. Assign the correct government DEPARTMENT from ONLY this list:
 {dept_list}
@@ -409,9 +409,10 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
   "issue_type": "your specific issue type here",
   "department": "exact department name from the list above",
   "severity": "low|medium|high|critical",
-  "priority": 1,
+  "priority": 1.0,
   "confidence": 0.85,
-  "reasoning": "Brief 2-sentence explanation of classification and severity"
+  "reasoning": "Brief 2-sentence explanation of classification and severity",
+  "is_irrelevant": true|false
 }}"""
 
 
@@ -465,7 +466,7 @@ async def _analyze_with_gemini(
                 logger.warning(f"Image processing for Gemini failed: {img_err}. Proceeding text-only.")
 
         # Try Gemini 2.5 Flash first, fall back to 2.0 Flash
-        model_names = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        model_names = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash-lite"]
         response = None
         used_model = None
 
@@ -511,6 +512,7 @@ async def _analyze_with_gemini(
         priority = int(result.get("priority", 3))
         confidence = float(result.get("confidence", 0.75))
         reasoning = str(result.get("reasoning", ""))
+        is_irrelevant = bool(result.get("is_irrelevant", False))
 
         # Validate issue_type
         if not issue_type or len(issue_type) < 3:
@@ -519,10 +521,13 @@ async def _analyze_with_gemini(
         # Validate/infer department
         department = _validate_department(department_raw)
         if not department:
-            department = _infer_department_from_text(
-                f"{issue_type} {title} {description}", area_type
-            )
-            logger.info(f"Department inferred from text: {department} (Gemini returned: {department_raw!r})")
+            if is_irrelevant:
+                department = "Municipal Administration & Urban Development" # Default for irrelevant
+            else:
+                department = _infer_department_from_text(
+                    f"{issue_type} {title} {description}", area_type
+                )
+                logger.info(f"Department inferred from text: {department} (Gemini returned: {department_raw!r})")
 
         # Validate severity
         if severity not in ("low", "medium", "high", "critical"):
@@ -544,6 +549,7 @@ async def _analyze_with_gemini(
             "reasoning": reasoning,
             "model_version": used_model,
             "raw_response": raw_text[:2000],  # truncate for DB storage
+            "is_irrelevant": is_irrelevant,
         }
 
     except json.JSONDecodeError as e:
@@ -627,6 +633,7 @@ async def analyze_issue(
             "reasoning": "Emergency fallback: classification service encountered an unexpected error. Manual review required.",
             "model_version": "emergency-fallback-v1",
             "raw_response": None,
+            "is_irrelevant": False,
         }
 
 
