@@ -3,6 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
+    ENVIRONMENT: str = "development"
     # Database — uses SQLite by default for easy local dev, switch to PostgreSQL for production
     DATABASE_URL: str = "sqlite+aiosqlite:///./governance.db"
 

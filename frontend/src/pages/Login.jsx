@@ -116,12 +116,6 @@ export default function Login() {
           Don't have an account? <Link to="/register">Register here</Link>
         </div>
 
-        <div style={{ marginTop: '24px', padding: '12px 16px', background: 'var(--gray-50)', borderRadius: 'var(--radius-lg)', fontSize: '0.78rem', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}>
-          <strong>Demo accounts:</strong><br />
-          Admin: admin@gov.in / admin123<br />
-          Citizen: citizen@example.com / citizen123<br />
-          Officer: officer@gov.in / officer123
-        </div>
       </div>
     </div>
   );

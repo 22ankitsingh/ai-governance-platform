@@ -24,7 +24,7 @@ class Issue(Base):
 
     # Classification (new structured system)
     issue_type_id = Column(String(36), ForeignKey("issue_types.id"), nullable=True)
-    department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
+    department_id = Column(String(36), ForeignKey("departments.id"), index=True, nullable=True)
 
     # Legacy fields — kept for DB compatibility; category is auto-populated from issue_type.name
     category = Column(String(100), nullable=True)
@@ -41,7 +41,7 @@ class Issue(Base):
     priority = Column(Integer, default=3)
 
     # Status
-    status = Column(String(30), default="not_assigned")
+    status = Column(String(30), default="not_assigned", index=True)
 
     # AI
     ai_confidence = Column(Float, nullable=True)
@@ -61,7 +61,7 @@ class Issue(Base):
     reporter_id = Column(String(36), ForeignKey("users.id"), nullable=False)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
     closed_at = Column(DateTime, nullable=True)

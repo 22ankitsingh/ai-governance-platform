@@ -271,25 +271,25 @@ def send_resolution_email_sync(
     logger.info(
         "Sending resolution email via SMTP to %s for issue %s", to_email, issue_id
     )
-    try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            smtp.sendmail(msg["From"], [to_email], msg.as_string())
-
-        logger.info(
-            "Email sent successfully to %s for issue %s", to_email, issue_id
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.error(
-            "Email failed for issue %s (recipient: %s): %s",
-            issue_id,
-            to_email,
-            exc,
-            exc_info=True,
-        )
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                smtp.sendmail(msg["From"], [to_email], msg.as_string())
+            
+            logger.info("Email sent successfully to %s for issue %s", to_email, issue_id)
+            break
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                logger.warning("Email attempt %d failed for issue %s: %s. Retrying...", attempt + 1, issue_id, exc)
+                time.sleep(2 ** attempt)
+            else:
+                logger.error("Email failed for issue %s (recipient: %s) after %d attempts: %s", issue_id, to_email, max_retries, exc, exc_info=True)
 
 
 def send_assignment_email_sync(
@@ -335,14 +335,22 @@ def send_assignment_email_sync(
     msg.attach(MIMEText(plain_text, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
-    try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            smtp.sendmail(msg["From"], [to_email], msg.as_string())
-        logger.info(f"Assignment email sent to {to_email} for issue {issue_id}")
-    except Exception as exc:
-        logger.error(f"Assignment email failed for issue {issue_id} (recipient: {to_email}): {exc}")
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                smtp.sendmail(msg["From"], [to_email], msg.as_string())
+            logger.info(f"Assignment email sent to {to_email} for issue {issue_id}")
+            break
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                logger.warning(f"Assignment email attempt {attempt + 1} failed for issue {issue_id}: {exc}. Retrying...")
+                time.sleep(2 ** attempt)
+            else:
+                logger.error(f"Assignment email failed for issue {issue_id} (recipient: {to_email}) after {max_retries} attempts: {exc}")
 
