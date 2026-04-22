@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.officer import Officer
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
