@@ -135,7 +135,6 @@ CLOUDINARY_API_SECRET=your_api_secret
 SMTP_EMAIL=your_email
 SMTP_PASSWORD=your_password
 ```
-
 ---
 
 ## 📊 Key Highlights
